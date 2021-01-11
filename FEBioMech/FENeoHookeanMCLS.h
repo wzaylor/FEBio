@@ -3,7 +3,7 @@ listed below.
 
 See Copyright-FEBio.txt for details.
 
-Copyright (c) 2019 University of Utah, The Trustees of Columbia University in 
+Copyright (c) 2020 University of Utah, The Trustees of Columbia University in 
 the City of New York, and others.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,21 +25,22 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.*/
 
 
+
 #pragma once
 #include "FEElasticMaterial.h"
-
+#include <FECore/FEModelParam.h>
 //-----------------------------------------------------------------------------
 //! Neo Hookean material
 
 //! Implementation of a neo-Hookean hyperelastic material.
-class FENeoHookeanMCLS : public FEElasticMaterial
+class FEBIOMECH_API FENeoHookeanMCLS : public FEElasticMaterial
 {
 public:
 	FENeoHookeanMCLS(FEModel* pfem) : FEElasticMaterial(pfem) {}
 
 public:
-	double	m_E;	//!< Young's modulus
-	double	m_v;	//!< Poisson's ratio
+	FEParamDouble		m_E;	//!< Young's modulus
+	FEParamDouble		m_v;	//!< Poisson's ratio
 
 public:
 	//! calculate stress at material point
@@ -54,6 +55,12 @@ public:
 	//! calculate strain energy density at material point
 	virtual double StrainEnergyDensity(FEMaterialPoint& pt) override;
     
+	//! calculate the 2nd Piola-Kirchhoff stress at material point
+    // mat3ds PK2Stress(FEMaterialPoint& pt, const mat3ds E) override; **MCLS** Comment these out because they are formulated and defined in FENeoHookeanMCLS.cpp
+    
+    //! calculate material tangent stiffness at material point
+    // tens4ds MaterialTangent(FEMaterialPoint& pt, const mat3ds E) override; **MCLS** Comment these out because they are formulated and defined in FENeoHookeanMCLS.cpp
+    
 	// declare the parameter list
-	DECLARE_PARAMETER_LIST();
+	DECLARE_FECORE_CLASS();
 };

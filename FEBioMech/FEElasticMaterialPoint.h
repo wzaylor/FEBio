@@ -55,6 +55,7 @@ public:
 
 	mat3ds RightCauchyGreen() const;
 	mat3ds LeftCauchyGreen () const;
+	mat3ds LeftCauchyGreenMCLS () const;
 
 	mat3ds DevRightCauchyGreen() const;
 	mat3ds DevLeftCauchyGreen () const;

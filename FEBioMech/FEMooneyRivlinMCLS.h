@@ -27,18 +27,18 @@ SOFTWARE.*/
 
 #pragma once
 #include "FEUncoupledMaterial.h"
-
+#include <FECore/FEModelParam.h>
 //-----------------------------------------------------------------------------
 //! Mooney-Rivlin material
 
-class FEMooneyRivlin : public FEUncoupledMaterial
+class FEMooneyRivlinMCLS : public FEUncoupledMaterial
 {
 public:
-	FEMooneyRivlin(FEModel* pfem) : FEUncoupledMaterial(pfem) {}
+	FEMooneyRivlinMCLS(FEModel* pfem) : FEUncoupledMaterial(pfem) {}
 
 public:
-	double	c1;	//!< Mooney-Rivlin coefficient C1
-	double	c2;	//!< Mooney-Rivlin coefficient C2
+	FEParamDouble	m_c1;	//!< Mooney-Rivlin coefficient C1
+	FEParamDouble	m_c2;	//!< Mooney-Rivlin coefficient C2
 
 public:
 	//! calculate deviatoric stress at material point
@@ -51,5 +51,5 @@ public:
 	double DevStrainEnergyDensity(FEMaterialPoint& mp) override;
     
 	// declare the parameter list
-	DECLARE_PARAMETER_LIST();
+	DECLARE_FECORE_CLASS();
 };

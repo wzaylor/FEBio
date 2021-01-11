@@ -3,7 +3,7 @@ listed below.
 
 See Copyright-FEBio.txt for details.
 
-Copyright (c) 2019 University of Utah, The Trustees of Columbia University in 
+Copyright (c) 2020 University of Utah, The Trustees of Columbia University in 
 the City of New York, and others.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,15 +30,19 @@ SOFTWARE.*/
 
 //-----------------------------------------------------------------------------
 // define the material parameters
-BEGIN_PARAMETER_LIST(FENeoHookeanMCLS, FEElasticMaterial)
-	ADD_PARAMETER2(m_E, FE_PARAM_DOUBLE, FE_RANGE_GREATER   (      0.0), "E");
-	ADD_PARAMETER2(m_v, FE_PARAM_DOUBLE, FE_RANGE_RIGHT_OPEN(-1.0, 0.5), "v");
-END_PARAMETER_LIST();
+BEGIN_FECORE_CLASS(FENeoHookeanMCLS, FEElasticMaterial)
+	ADD_PARAMETER(m_E, FE_RANGE_GREATER(0.0), "E");
+	ADD_PARAMETER(m_v, FE_RANGE_RIGHT_OPEN(-1, 0.5), "v");
+END_FECORE_CLASS();
 
 //-----------------------------------------------------------------------------
 mat3ds FENeoHookeanMCLS::Stress(FEMaterialPoint& mp)
 {
 	FEElasticMaterialPoint& pt = *mp.ExtractData<FEElasticMaterialPoint>();
+
+	// get the material parameters
+	double E = m_E(mp);
+	double v = m_v(mp);
 
 	double j = pt.m_J; // **MCLS** This is the determinant of the inverse deformation gradient (i.e. j = 1/J)
 	double J = 1.0/j; // **MCLS** The determinant of the deformation gradient (J = 1/j).
@@ -48,8 +52,8 @@ mat3ds FENeoHookeanMCLS::Stress(FEMaterialPoint& mp)
 	mat3ds b = pt.LeftCauchyGreenMCLS();
 
 	// lame parameters
-	double lam = m_v*m_E/((1+m_v)*(1-2*m_v));
-	double mu  = 0.5*m_E/(1+m_v);
+	double lam = v*E/((1+v)*(1-2*v));
+	double mu  = 0.5*E/(1+v);
 
 	// Identity
 	mat3dd I(1);
@@ -70,13 +74,17 @@ void FENeoHookeanMCLS::Tangent(FEMaterialPoint& mp, double D[6][6])
 	// deformation gradient
 	double detF = pt.m_J;
 
+	// get the material parameters
+	double E = m_E(mp);
+	double v = m_v(mp);
+
 	// calculate left Cauchy-Green tensor
 	mat3ds b = pt.LeftCauchyGreenMCLS();
 	double identity[3][3] = {{1., 0., 0.}, {0., 1., 0.}, {0., 0., 1.}};
 
 	// lame parameters
-	double lam = m_v*m_E/((1+m_v)*(1-2*m_v));
-	double mu  = 0.5*m_E/(1+m_v);
+	double lam = v*E/((1+v)*(1-2*v));
+	double mu  = 0.5*E/(1+v);
 
 	// double lam1 = lam / detF;
 	// double mu1  = (mu - lam*log(detF)) / detF;
@@ -109,9 +117,13 @@ tens4ds FENeoHookeanMCLS::Tangent(FEMaterialPoint& mp)
 	// deformation gradient
 	double detF = pt.m_J;
 
+	// get the material parameters
+	double E = m_E(mp);
+	double v = m_v(mp);
+
 	// lame parameters
-	double lam = m_v*m_E/((1+m_v)*(1-2*m_v));
-	double mu  = 0.5*m_E/(1+m_v);
+	double lam = v*E/((1+v)*(1-2*v));
+	double mu  = 0.5*E/(1+v);
 
 	double lam1 = lam / detF;
 	double mu1  = (mu - lam*log(detF)) / detF;
@@ -135,13 +147,16 @@ double FENeoHookeanMCLS::StrainEnergyDensity(FEMaterialPoint& mp)
 	double J = pt.m_J;
 	double lnJ = log(J);
 	
+		// get the material parameters
+	double E = m_E(mp);
+	double v = m_v(mp);
 	// calculate left Cauchy-Green tensor
 	mat3ds b = pt.LeftCauchyGreen();
 	double I1 = b.tr();
 	
 	// lame parameters
-	double lam = m_v*m_E/((1+m_v)*(1-2*m_v));
-	double mu  = 0.5*m_E/(1+m_v);
+	double lam = v*E/((1+v)*(1-2*v));
+	double mu  = 0.5*E/(1+v);
 	
 	double sed = mu*((I1-3)/2.0 - lnJ)+lam*lnJ*lnJ/2.0;
 	
