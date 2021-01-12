@@ -256,6 +256,119 @@ void FE3FieldElasticSolidDomain::ElementDilatationalStiffness(FEModel& fem, int 
 			ke[i][j] += k*gradN[i]*gradN[j];
 }
 
+// //-----------------------------------------------------------------------------
+// //! Calculates element material stiffness element matrix
+
+// void FE3FieldElasticSolidDomain::ElementMaterialStiffness(int iel, matrix &ke)
+// {
+// 	FESolidElement &el = Element(iel);
+// 	ELEM_DATA& ed = m_Data[iel];
+
+// 	// Get the current element's data
+// 	const int nint = el.GaussPoints();
+// 	const int neln = el.Nodes();
+// 	const int ndof = 3*neln;
+
+// 	// global derivatives of shape functions
+// 	const int NME = FEElement::MAX_NODES;
+// 	vec3d G[NME];
+
+// 	double Gxi, Gyi, Gzi;
+// 	double Gxj, Gyj, Gzj;
+
+// 	// The 'D' matrix
+// 	double D[6][6] = {0};	// The 'D' matrix
+
+// 	// The 'D*BL' matrix
+// 	double DBL[6][3];
+
+// 	// weights at gauss points
+// 	const double *gw = el.GaussWeights();
+
+// 	// get the material
+// 	FEUncoupledMaterial& mat = dynamic_cast<FEUncoupledMaterial&>(*m_pMat);
+
+// 	// we need the following tensors for the dilational stiffness
+// 	mat3dd I(1);
+// 	tens4ds IxI = dyad1s(I);
+// 	tens4ds I4  = dyad4s(I);
+// 	tens4ds Cp = IxI - I4*2;
+
+// 	// calculate element stiffness matrix
+// 	for (int n=0; n<nint; ++n)
+// 	{
+// 		// calculate jacobian
+// 		double detJt = ShapeGradient(el, n, G, m_alphaf)*gw[n]*m_alphaf;
+
+// 		// setup the material point
+// 		// NOTE: deformation gradient and determinant have already been evaluated in the stress routine
+// 		FEMaterialPoint& mp = *el.GetMaterialPoint(n);
+// 		FEElasticMaterialPoint& pt = *(mp.ExtractData<FEElasticMaterialPoint>());
+
+// 		// get the material's tangent
+// 		// Note that we are only grabbing the deviatoric tangent. 
+// 		// The other tangent terms depend on the pressure p
+// 		// which we seperately
+// 		tens4ds C = Cp*ed.ep + mat.DevTangent(mp);
+
+// 		// get the 'D' matrix
+// 		C.extract(D);
+
+// 		// we only calculate the upper triangular part
+// 		// since ke is symmetric. The other part is
+// 		// determined below using this symmetry.
+// 		for (int i = 0, i3 = 0; i<neln; ++i, i3 += 3)
+// 		{
+// 			Gxi = G[i].x;
+// 			Gyi = G[i].y;
+// 			Gzi = G[i].z;
+
+// 			for (int j = i, j3 = i3; j<neln; ++j, j3 += 3)
+// 			{
+// 				Gxj = G[j].x;
+// 				Gyj = G[j].y;
+// 				Gzj = G[j].z;
+
+// 				// calculate D*BL matrices
+// 				DBL[0][0] = (D[0][0]*Gxj+D[0][3]*Gyj+D[0][5]*Gzj);
+// 				DBL[0][1] = (D[0][1]*Gyj+D[0][3]*Gxj+D[0][4]*Gzj);
+// 				DBL[0][2] = (D[0][2]*Gzj+D[0][4]*Gyj+D[0][5]*Gxj);
+
+// 				DBL[1][0] = (D[1][0]*Gxj+D[1][3]*Gyj+D[1][5]*Gzj);
+// 				DBL[1][1] = (D[1][1]*Gyj+D[1][3]*Gxj+D[1][4]*Gzj);
+// 				DBL[1][2] = (D[1][2]*Gzj+D[1][4]*Gyj+D[1][5]*Gxj);
+
+// 				DBL[2][0] = (D[2][0]*Gxj+D[2][3]*Gyj+D[2][5]*Gzj);
+// 				DBL[2][1] = (D[2][1]*Gyj+D[2][3]*Gxj+D[2][4]*Gzj);
+// 				DBL[2][2] = (D[2][2]*Gzj+D[2][4]*Gyj+D[2][5]*Gxj);
+
+// 				DBL[3][0] = (D[3][0]*Gxj+D[3][3]*Gyj+D[3][5]*Gzj);
+// 				DBL[3][1] = (D[3][1]*Gyj+D[3][3]*Gxj+D[3][4]*Gzj);
+// 				DBL[3][2] = (D[3][2]*Gzj+D[3][4]*Gyj+D[3][5]*Gxj);
+
+// 				DBL[4][0] = (D[4][0]*Gxj+D[4][3]*Gyj+D[4][5]*Gzj);
+// 				DBL[4][1] = (D[4][1]*Gyj+D[4][3]*Gxj+D[4][4]*Gzj);
+// 				DBL[4][2] = (D[4][2]*Gzj+D[4][4]*Gyj+D[4][5]*Gxj);
+
+// 				DBL[5][0] = (D[5][0]*Gxj+D[5][3]*Gyj+D[5][5]*Gzj);
+// 				DBL[5][1] = (D[5][1]*Gyj+D[5][3]*Gxj+D[5][4]*Gzj);
+// 				DBL[5][2] = (D[5][2]*Gzj+D[5][4]*Gyj+D[5][5]*Gxj);
+
+// 				ke[i3  ][j3  ] += (Gxi*DBL[0][0] + Gyi*DBL[3][0] + Gzi*DBL[5][0] )*detJt;
+// 				ke[i3  ][j3+1] += (Gxi*DBL[0][1] + Gyi*DBL[3][1] + Gzi*DBL[5][1] )*detJt;
+// 				ke[i3  ][j3+2] += (Gxi*DBL[0][2] + Gyi*DBL[3][2] + Gzi*DBL[5][2] )*detJt;
+
+// 				ke[i3+1][j3  ] += (Gyi*DBL[1][0] + Gxi*DBL[3][0] + Gzi*DBL[4][0] )*detJt;
+// 				ke[i3+1][j3+1] += (Gyi*DBL[1][1] + Gxi*DBL[3][1] + Gzi*DBL[4][1] )*detJt;
+// 				ke[i3+1][j3+2] += (Gyi*DBL[1][2] + Gxi*DBL[3][2] + Gzi*DBL[4][2] )*detJt;
+
+// 				ke[i3+2][j3  ] += (Gzi*DBL[2][0] + Gyi*DBL[4][0] + Gxi*DBL[5][0] )*detJt;
+// 				ke[i3+2][j3+1] += (Gzi*DBL[2][1] + Gyi*DBL[4][1] + Gxi*DBL[5][1] )*detJt;
+// 				ke[i3+2][j3+2] += (Gzi*DBL[2][2] + Gyi*DBL[4][2] + Gxi*DBL[5][2] )*detJt;
+// 			}
+// 		}
+// 	}
+// }
 //-----------------------------------------------------------------------------
 //! Calculates element material stiffness element matrix
 
@@ -376,6 +489,7 @@ void FE3FieldElasticSolidDomain::ElementMaterialStiffness(int iel, matrix &ke)
 void FE3FieldElasticSolidDomain::ElementGeometricalStiffness(int iel, matrix &ke)
 {
 	FESolidElement &el = Element(iel);
+	ELEM_DATA& ed = m_Data[iel];
 
 	const int NME = FEElement::MAX_NODES;
 	double Gx[NME], Gy[NME], Gz[NME];
@@ -389,55 +503,94 @@ void FE3FieldElasticSolidDomain::ElementGeometricalStiffness(int iel, matrix &ke
 	int nint = el.GaussPoints();
 
 	// jacobian
-	double Ji[3][3], detJt;
+	double j_i[3][3], det_j0;
+
+	// Initalize terms used below.
+	double term1[3], term2[3];
+
+	// **MCLS** The inverse deformation gradient.
+	mat3d f_Ai;
+	// **MCLS** The deformation gradient.
+	mat3d F_iA;
+
+	// The determinant of the inverse deformation gradient (j=1/J)
+	double det_f_Ai;
 
 	// weights at gauss points
 	const double *gw = el.GaussWeights();
 
-	// stiffness component for the initial stress component of stiffness matrix
-	double kab;
-
 	// calculate geometrical element stiffness matrix
 	for (int n=0; n<nint; ++n)
 	{
-		// calculate jacobian
-		detJt = invjact(el, Ji, n, m_alphaf)*gw[n]*m_alphaf;
+		// **MCLS** Define the inverse deformation gradient (f_Ai) and it's determinant.
+		// Note that the code doesn't need to calculate the inverse.
+		// The inverse deformation gradient is calculated using the original code
+		// The inverse gradient is calculated because we are taking the original known node positions to be in the deformed configuration, and taking the displacements to be defining the node positions in the reference configuration.
+		det_f_Ai = defgrad(el, f_Ai, n);
+
+		// calculate shape function gradients and jacobian
+		// **MCLS** This changed because the shape function gradient (G) is taken with respect to the known current configuration.
+		// The current configuration is defined with respect to the node positions defined from the input (i.e. the originally defined mesh).
+		// This change is needed because the original code has the reference configuration is known
+		det_j0 = invjac0(el, j_i, n);//*gw[n]*m_alphaf;
+
+		// **MCLS** Calculate the inverse of the inverse deformation gradient.
+		// i.e. this is the deformation gradient that is traditionally used.
+		F_iA = f_Ai.inverse();
 
 		Grn = el.Gr(n);
 		Gsn = el.Gs(n);
 		Gtn = el.Gt(n);
 
+		// Calculate the gradient of the shape function at each of the integration points.
+    	// See eq. 1.137, 1.138 on pg 62 and 63 in Kim, Introduction to Nonlinear Finite Element Analysis.
 		for (int i = 0; i<neln; ++i)
 		{
-			Gr = Grn[i];
-			Gs = Gsn[i];
-			Gt = Gtn[i];
+			// Incorporate the Gauss weights here
+			Gr = Grn[i]*gw[n]*m_alphaf;
+			Gs = Gsn[i]*gw[n]*m_alphaf;
+			Gt = Gtn[i]*gw[n]*m_alphaf;
 
 			// calculate global gradient of shape functions
-			// note that we need the transposed of Ji, not Ji itself !
-			Gx[i] = Ji[0][0]*Gr+Ji[1][0]*Gs+Ji[2][0]*Gt;
-			Gy[i] = Ji[0][1]*Gr+Ji[1][1]*Gs+Ji[2][1]*Gt;
-			Gz[i] = Ji[0][2]*Gr+Ji[1][2]*Gs+Ji[2][2]*Gt;
+			// note that we need the transposed of j_i, not j_i itself !
+			Gx[i] = j_i[0][0]*Gr + j_i[1][0]*Gs + j_i[2][0]*Gt;
+			Gy[i] = j_i[0][1]*Gr + j_i[1][1]*Gs + j_i[2][1]*Gt;
+			Gz[i] = j_i[0][2]*Gr + j_i[1][2]*Gs + j_i[2][2]*Gt;
 		}
 
 		// get the material point data
 		FEMaterialPoint& mp = *el.GetMaterialPoint(n);
 		FEElasticMaterialPoint& pt = *(mp.ExtractData<FEElasticMaterialPoint>());
 
-		// element's Cauchy-stress tensor at gauss point n
+		// element's deviatoric Cauchy-stress tensor at gauss point n
 		// s is the voight vector
 		mat3ds& s = pt.m_s;
+		s += -mat3dd(ed.ep); // Remove the pressure component of the Cauchy stress tensor.
 
-		for (int i = 0; i<neln; ++i)
-			for (int j = i; j<neln; ++j)
+		// **MCLS** ke is not symmetric
+		for (int i=0, i3=0; i<neln; ++i, i3 += 3)
+			// **MCLS** ke is not symmetric, so j is iterated from 0 to neln
+			for (int j=0, j3 = 0; j<neln; ++j, j3 += 3)
 			{
-				kab = (Gx[i]*(s.xx()*Gx[j]+s.xy()*Gy[j]+s.xz()*Gz[j]) +
-					   Gy[i]*(s.xy()*Gx[j]+s.yy()*Gy[j]+s.yz()*Gz[j]) + 
-					   Gz[i]*(s.xz()*Gx[j]+s.yz()*Gy[j]+s.zz()*Gz[j]))*detJt;
+				term1[0] = Gx[i]*s.xx() + Gy[i]*s.xy() + Gz[i]*s.xz();
+				term1[1] = Gx[i]*s.xy() + Gy[i]*s.yy() + Gz[i]*s.yz();
+				term1[2] = Gx[i]*s.xz() + Gy[i]*s.yz() + Gz[i]*s.zz();
 
-				ke[3*i  ][3*j  ] += kab;
-				ke[3*i+1][3*j+1] += kab;
-				ke[3*i+2][3*j+2] += kab;
+				term2[0] = Gx[j]*F_iA[0][0] + Gy[j]*F_iA[1][0] + Gz[j]*F_iA[2][0];
+				term2[1] = Gx[j]*F_iA[0][1] + Gy[j]*F_iA[1][1] + Gz[j]*F_iA[2][1];
+				term2[2] = Gx[j]*F_iA[0][2] + Gy[j]*F_iA[1][2] + Gz[j]*F_iA[2][2];
+
+				ke[i3  ][j3  ] += term1[0]*term2[0];
+				ke[i3  ][j3+1] += term1[0]*term2[1];
+				ke[i3  ][j3+2] += term1[0]*term2[2];
+
+				ke[i3+1][j3  ] += term1[1]*term2[0];
+				ke[i3+1][j3+1] += term1[1]*term2[1];
+				ke[i3+1][j3+2] += term1[1]*term2[2];
+
+				ke[i3+2][j3  ] += term1[2]*term2[0];
+				ke[i3+2][j3+1] += term1[2]*term2[1];
+				ke[i3+2][j3+2] += term1[2]*term2[2];
 			}
 	}
 }
