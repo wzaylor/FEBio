@@ -175,6 +175,30 @@ mat3ds FEElasticMaterialPoint::DevLeftCauchyGreen() const
 }
 
 //-----------------------------------------------------------------------------
+//! Calculates the left Cauchy-Green tensor at the current material point
+// NOTE:: This uses/assumes that "f" is the inverse deformation gradient.
+mat3ds FEElasticMaterialPoint::DevLeftCauchyGreenMCLS() const
+{
+	// double Jm23 = pow(m_J, -2.0/3.0);
+	double Jm23 = pow(m_J, 2.0/3.0); // Note that m_J is actually the determinant of the inverse deformation gradient because if is caluclated from m_F which is the inverse deformation gradient because it is assumed that the given/known configuration is the deformed configuration (and not the reference configuration)
+
+	// get the left Cauchy-Green tensor
+	// b = F*Ft
+	const mat3d& f = m_F; // **MCLS** Note that m_F is the inverse deformation gradient because it is assumed that the given/known configuration is the deformed configuration (and not the reference configuration)
+	mat3d F;
+	F = f.inverse();
+	mat3ds b;
+	b.xx() = Jm23*(F[0][0]*F[0][0]+F[0][1]*F[0][1]+F[0][2]*F[0][2]); // = b[0][0]
+	b.yy() = Jm23*(F[1][0]*F[1][0]+F[1][1]*F[1][1]+F[1][2]*F[1][2]); // = b[1][1]
+	b.zz() = Jm23*(F[2][0]*F[2][0]+F[2][1]*F[2][1]+F[2][2]*F[2][2]); // = b[2][2]
+	b.xy() = Jm23*(F[0][0]*F[1][0]+F[0][1]*F[1][1]+F[0][2]*F[1][2]); // = b[0][1]
+	b.yz() = Jm23*(F[1][0]*F[2][0]+F[1][1]*F[2][1]+F[1][2]*F[2][2]); // = b[1][2]
+	b.xz() = Jm23*(F[0][0]*F[2][0]+F[0][1]*F[2][1]+F[0][2]*F[2][2]); // = b[0][2]
+
+	return b;
+}
+
+//-----------------------------------------------------------------------------
 //! Calculates the right stretch tensor at the current material point
 
 mat3ds FEElasticMaterialPoint::RightStretch() const

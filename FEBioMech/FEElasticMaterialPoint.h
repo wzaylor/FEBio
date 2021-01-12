@@ -59,6 +59,7 @@ public:
 
 	mat3ds DevRightCauchyGreen() const;
 	mat3ds DevLeftCauchyGreen () const;
+	mat3ds DevLeftCauchyGreenMCLS () const;
     
     mat3ds RightStretch() const;
     mat3ds LeftStretch () const;

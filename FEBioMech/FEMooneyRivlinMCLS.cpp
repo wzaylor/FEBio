@@ -90,9 +90,13 @@ tens4ds FEMooneyRivlinMCLS::DevTangent(FEMaterialPoint& mp)
 	// get material parameters
 	double c1 = m_c1(mp);
 	double c2 = m_c2(mp);
-	// determinant of deformation gradient
-	double J = pt.m_J;
-	double Ji = 1.0/J;
+
+	// **MCLS** Define the determinant of the inverse deformation gradient (f_Ai).
+	// pt.m_J is calculated using pt.m_F, where pt.m_F is the inverse deformation gradient (f_Ai)
+	// pt.m_F is the inverse deformation gradient because because we are taking the original known node positions to be in the deformed configuration, and taking the displacements to be defining the node positions in the reference configuration.
+	// Therefore, pt.m_F would more accurately be called pt.m_f, however this would require updating much more of the code.
+	double det_f_Ai_23 = pow(pt.m_J, 2./3.);
+	double det_f_Ai_43 = pow(pt.m_J, 4./3.);
 
 	// calculate deviatoric left Cauchy-Green tensor: B = F*Ft
 	mat3ds b_ij = pt.DevLeftCauchyGreen();
@@ -106,6 +110,9 @@ tens4ds FEMooneyRivlinMCLS::DevTangent(FEMaterialPoint& mp)
 	b_ij_cubed.yz() = b_ij.xy()*b_ij_squared.xz() + b_ij.yy()*b_ij_squared.yz() + b_ij.yz()*b_ij_squared.zz();
 	b_ij_cubed.xz() = b_ij.xx()*b_ij_squared.xz() + b_ij.xy()*b_ij_squared.yz() + b_ij.xz()*b_ij_squared.zz();
 
+	// Initialize the stiffness matrix (i.e. the tangent matrix)
+	tens4ds stiffnessMatrix;
+
 	// The fourth order tensors used to calculate the material stiffness matrix
 	tens4ds bXb = 0.5*dyad1s(b_ij); // The tensor product a^ijkl = b^ij*b^kl
 	tens4ds b_ikjl = dyad4s(b_ij); // 0.5*(b^ik*b^jl + b^il*b^jk)
@@ -114,55 +121,36 @@ tens4ds FEMooneyRivlinMCLS::DevTangent(FEMaterialPoint& mp)
 	tens4ds b2Xb2_ijkl = 0.5*dyad1s(b_ij_squared); // The tensor product a^ijkl = b^im g_mn b^nj b^kr g_rs b^sl
 	tens4ds b3Xb_ijkl = dyad1s(b_ij_cubed, b_ij); // The sum of tensor products a^ijkl = (b^3)^ij b^kl + b^ij (b^3)^kl
 	tens4ds b3b_ijkl = dyad4s(b_ij_cubed, b_ij); // a^ijab = 0.5{[b^ra b^ib + b^rb b^ia]b^js g_sm b^mn g_rn + [b^ja b^sb + b^jb b^sa]b^ri g_sm b^mn g_rn}
-	tens4ds b2_ijkl = 0.5*dyad4s(b_ij_squared); // a^ijkl = 0.5 b^ri b^js g_sm [b^mk b^nl + b^ml b^nk]
+	tens4ds b2_ijkl = dyad4s(b_ij_squared); // a^ijkl = 0.5 b^ri b^js g_sm [b^mk b^nl + b^ml b^nk]
 
 	tens4ds c1Term; // The terms that are multiplied by c1 in the material stiffness matrix
 	tens4ds c2Term; // The terms that are multiplied by c1 in the material stiffness matrix
 
 	c1Term = -(1./3.)*b2Xb_ijkl;
-	c1Term += (1./9.)*b_ij.tr()*bXb; // Recall that bxb is multiplied by 0.5 when it is defined.
+	c1Term += (1./9.)*b_ij.tr()*bXb; // Recall that bXb is multiplied by 0.5 when it is defined above.
 	c1Term += b2b_ijlk;
 	c1Term += -(1./3.)*b_ij.tr()*b_ikjl;
 
-	// // calculate square of B
-	// mat3ds B2 = B.sqr();
+	c2Term = (2./3.)*b3Xb_ijkl;
+	c2Term += -(2./9.)*b_ij_squared.tr()*bXb; // Recall that bXb is multiplied by 0.5 when it is defined above.
+	c2Term += -(2./3.)*b_ij.tr()*b2Xb_ijkl;
+	c2Term += (2./9.)*b_ij.tr()*b_ij.tr()*bXb; // Recall that bXb is multiplied by 0.5 when it is defined above.
 
-	// // Invariants of B (= invariants of C)
-	// double I1 = B.tr();
-	// double I2 = 0.5*(I1*I1 - B2.tr());
+	c2Term += -b3b_ijkl;
+	c2Term += -b2_ijkl;
 
-	// // --- TODO: put strain energy derivatives here ---
-	// // Wi = dW/dIi
-	// double W1, W2;
-	// W1 = c1;
-	// W2 = c2;
-	// // ---
+	c2Term += (1./3.)*b_ij_squared.tr()*b_ikjl;
 
-	// // calculate dWdC:C
-	// double WC = W1*I1 + 2*W2*I2;
+	c2Term += b_ij.tr()*b2b_ijlk;
+	c2Term += b2Xb2_ijkl; // Recall that b2Xb2_ijkl is multiplied by 0.5 when it is defined above.
 
-	// // calculate C:d2WdCdC:C
-	// double CWWC = 2*I2*W2;
+	c2Term += -(1./3.)*b_ij.tr()*b_ij.tr()*b_ikjl;
 
-	// // deviatoric cauchy-stress, trs = trace[s]/3
-	// mat3ds devs = pt.m_s.dev();
+	// Use the terms above to calculate the stiffnessMatrix
+	stiffnessMatrix = c1*det_f_Ai_23*c1Term;
+	stiffnessMatrix += c2*det_f_Ai_43*c2Term;
 
-	// // Identity tensor
-	// mat3ds I(1,1,1,0,0,0);
-
-	// tens4ds IxI = dyad1s(I);
-	// tens4ds I4  = dyad4s(I);
-	// tens4ds BxB = dyad1s(B);
-	// tens4ds B4  = dyad4s(B);
-
-	// // d2W/dCdC:C
-	// mat3ds WCCxC = B*(W2*I1) - B2*W2;
-
-	// tens4ds cw = (BxB - B4)*(W2*4.0*Ji) - dyad1s(WCCxC, I)*(4.0/3.0*Ji) + IxI*(4.0/9.0*Ji*CWWC);
-
-	// tens4ds c = dyad1s(devs, I)*(-2.0/3.0) + (I4 - IxI/3.0)*(4.0/3.0*Ji*WC) + cw;
-
-	return c;
+	return stiffnessMatrix;
 }
 
 //-----------------------------------------------------------------------------
