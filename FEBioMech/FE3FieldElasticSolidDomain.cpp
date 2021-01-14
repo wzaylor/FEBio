@@ -174,9 +174,91 @@ void FE3FieldElasticSolidDomain::StiffnessMatrix(FELinearSystem& LS)
 	}
 }
 
+// //-----------------------------------------------------------------------------
+// //! calculates dilatational element stiffness component for element iel
+
+// void FE3FieldElasticSolidDomain::ElementDilatationalStiffness(FEModel& fem, int iel, matrix& ke)
+// {
+// 	int i, j, n;
+
+// 	FESolidElement& elem = Element(iel);
+// 	ELEM_DATA& ed = m_Data[iel];
+
+// 	const int nint = elem.GaussPoints();
+// 	const int neln = elem.Nodes();
+// 	const int ndof = 3*neln;
+
+// 	// get the elements material
+// 	FEUncoupledMaterial* pmi = dynamic_cast<FEUncoupledMaterial*>(m_pMat);
+// 	assert(pmi);
+
+// 	// average global derivatives
+// 	vector<double> gradN(3*neln);
+// 	zero(gradN);
+
+// 	// initial element volume
+// 	double Ve = 0;
+
+// 	// global derivatives of shape functions
+// 	double Gx, Gy, Gz;
+// 	const double *gw = elem.GaussWeights();
+
+// 	// jacobian
+// 	double Ji[3][3], Jt, J0;
+
+// 	double *Gr, *Gs, *Gt;
+
+// 	// repeat over gauss-points
+// 	for (n=0; n<nint; ++n)
+// 	{
+// 		// calculate jacobian
+// 		J0 = detJ0(elem, n);
+// 		Jt = invjact(elem, Ji, n, m_alphaf)*m_alphaf;
+
+// 		Jt *= gw[n];
+
+// 		Ve += J0*gw[n];
+
+// 		Gr = elem.Gr(n);
+// 		Gs = elem.Gs(n);
+// 		Gt = elem.Gt(n);
+
+// 		// calculate global gradient of shape functions
+// 		// note that we need the transposed of Ji, not Ji itself !
+// 		for (i=0; i<neln; ++i)
+// 		{
+// 			Gx = Ji[0][0]*Gr[i]+Ji[1][0]*Gs[i]+Ji[2][0]*Gt[i];
+// 			Gy = Ji[0][1]*Gr[i]+Ji[1][1]*Gs[i]+Ji[2][1]*Gt[i];
+// 			Gz = Ji[0][2]*Gr[i]+Ji[1][2]*Gs[i]+Ji[2][2]*Gt[i];
+
+// 			gradN[3*i  ] += Gx*Jt;
+// 			gradN[3*i+1] += Gy*Jt;
+// 			gradN[3*i+2] += Gz*Jt;
+// 		}
+// 	}
+
+// 	// get effective modulus
+// 	double k = pmi->UJJ(ed.eJ);
+
+// 	// next, we add the Lagrangian contribution
+// 	// note that this term will always be zero if the material does not
+// 	// use the augmented lagrangian
+// 	k += ed.Lk*pmi->hpp(ed.eJ);
+
+// 	// divide by initial volume
+// 	k /= Ve;
+
+// 	// calculate dilatational stiffness component
+// 	// we only calculate the upper triangular part
+// 	// since ke is symmetric.
+// 	for (i=0; i<ndof; ++i)
+// 		for (j=i; j<ndof; ++j)
+// 			ke[i][j] += k*gradN[i]*gradN[j];
+// }
+
 //-----------------------------------------------------------------------------
 //! calculates dilatational element stiffness component for element iel
-
+// **MCLS**
 void FE3FieldElasticSolidDomain::ElementDilatationalStiffness(FEModel& fem, int iel, matrix& ke)
 {
 	int i, j, n;
@@ -196,15 +278,17 @@ void FE3FieldElasticSolidDomain::ElementDilatationalStiffness(FEModel& fem, int 
 	vector<double> gradN(3*neln);
 	zero(gradN);
 
-	// initial element volume
-	double Ve = 0;
+	// **MCLS** element volume in the deformed configuration
+	double Ve_deformed = 0;
 
 	// global derivatives of shape functions
 	double Gx, Gy, Gz;
 	const double *gw = elem.GaussWeights();
 
 	// jacobian
-	double Ji[3][3], Jt, J0;
+	double Ji[3][3]; // The jacobian matrix between the isoparametric element space and the current, deformed configuration
+	double detJ0_element; // The determinant of Ji
+	double det_fAi; // The determinant of the inverse deformation gradient
 
 	double *Gr, *Gs, *Gt;
 
@@ -371,7 +455,7 @@ void FE3FieldElasticSolidDomain::ElementDilatationalStiffness(FEModel& fem, int 
 // }
 //-----------------------------------------------------------------------------
 //! Calculates element material stiffness element matrix
-
+// **MCLS**
 void FE3FieldElasticSolidDomain::ElementMaterialStiffness(int iel, matrix &ke)
 {
 	FESolidElement &el = Element(iel);
@@ -386,14 +470,42 @@ void FE3FieldElasticSolidDomain::ElementMaterialStiffness(int iel, matrix &ke)
 	const int NME = FEElement::MAX_NODES;
 	vec3d G[NME];
 
+	// The shape function derivative values
 	double Gxi, Gyi, Gzi;
 	double Gxj, Gyj, Gzj;
+	// The determinant of the element's jacobian.
+	double detJ0_element;
 
 	// The 'D' matrix
 	double D[6][6] = {0};	// The 'D' matrix
 
+	// **MCLS** The inverse deformation gradient.
+	mat3d f_Ai;
+
+	// **MCLS** The left Cauchy-Green deformation tensor and it's inverse (the Finger tensor)
+	mat3ds b_ij;
+	mat3ds c_ij;
+
+	// **MCLS** The determinant of the inverse deformation gradient (j=1/J)
+	double det_f_Ai;
+
+	// Terms used to break up the calculation in to smaller parts -------------------
+	// **MCLS** The B*(f_Ai)^T
+	double Bf_iA[6][3];
+
 	// The 'D*BL' matrix
 	double DBL[6][3];
+
+	// **MCLS** The D*B*(f_Ai)^T
+	double DBf_iA[6][3];
+
+	// a_j = dN/dx_i c_ij (summing over repeated indices)
+	double dNdxi_cij[3];
+
+
+	double ke_dev[3];
+
+	// -------------------------------------------------------------------------------
 
 	// weights at gauss points
 	const double *gw = el.GaussWeights();
@@ -410,13 +522,27 @@ void FE3FieldElasticSolidDomain::ElementMaterialStiffness(int iel, matrix &ke)
 	// calculate element stiffness matrix
 	for (int n=0; n<nint; ++n)
 	{
-		// calculate jacobian
-		double detJt = ShapeGradient(el, n, G, m_alphaf)*gw[n]*m_alphaf;
-
 		// setup the material point
 		// NOTE: deformation gradient and determinant have already been evaluated in the stress routine
 		FEMaterialPoint& mp = *el.GetMaterialPoint(n);
 		FEElasticMaterialPoint& pt = *(mp.ExtractData<FEElasticMaterialPoint>());
+
+		// calculate shape function gradients and jacobian
+		// **MCLS** This changed because the shape function gradient (G) is taken with respect to the known current configuration.
+		// The current configuration is defined with respect to the node positions defined from the input (i.e. the originally defined mesh).
+		// This change is needed because the original code has the reference configuration is known
+		// Note that the Gauss weights are incorporated here.
+		detJ0_element = ShapeGradient0(el, n, G)*gw[n]*m_alphaf;
+
+		// **MCLS** Define the inverse deformation gradient (f_Ai).
+		// Note that the code doesn't need to calculate the inverse.
+		// The inverse deformation gradient is calculated using the original code.
+		// The inverse gradient is calculated because we are taking the original known node positions to be in the deformed configuration, and taking the displacements to be defining the node positions in the reference configuration.
+		det_f_Ai = defgrad(el, f_Ai, n);
+
+		// **MCLS** define the Finger deformation tensor.
+		b_ij = pt.LeftCauchyGreenMCLS();
+		c_ij = b_ij.inverse();
 
 		// get the material's tangent
 		// Note that we are only grabbing the deviatoric tangent. 
@@ -436,52 +562,183 @@ void FE3FieldElasticSolidDomain::ElementMaterialStiffness(int iel, matrix &ke)
 			Gyi = G[i].y;
 			Gzi = G[i].z;
 
-			for (int j = i, j3 = i3; j<neln; ++j, j3 += 3)
+			// populate a_j = dN/dx_i c_ij (summing over repeated indices)
+			dNdxi_cij[0] = Gxi*c_ij(0,0) + Gyi*c_ij(1,0) + Gzi*c_ij(2,0);
+			dNdxi_cij[1] = Gxi*c_ij(0,1) + Gyi*c_ij(1,1) + Gzi*c_ij(2,1);
+			dNdxi_cij[2] = Gxi*c_ij(0,2) + Gyi*c_ij(1,2) + Gzi*c_ij(2,2);
+
+			// **MCLS** ke is not symmetric, so j is iterated from 0 to neln
+			for (int j=0, j3 = 0; j<neln; ++j, j3 += 3)
 			{
 				Gxj = G[j].x;
 				Gyj = G[j].y;
 				Gzj = G[j].z;
 
-				// calculate D*BL matrices
-				DBL[0][0] = (D[0][0]*Gxj+D[0][3]*Gyj+D[0][5]*Gzj);
-				DBL[0][1] = (D[0][1]*Gyj+D[0][3]*Gxj+D[0][4]*Gzj);
-				DBL[0][2] = (D[0][2]*Gzj+D[0][4]*Gyj+D[0][5]*Gxj);
+				// **MCLS** Calculate (dN/dx_i)(f_Aj)^T Also written as B*(f_Ai)^T
+				Bf_iA[0][0] = Gxj*f_Ai[0][0];   Bf_iA[0][1] = Gxj*f_Ai[1][0];   Bf_iA[0][2] = Gxj*f_Ai[2][0];
+				Bf_iA[1][0] = Gyj*f_Ai[0][1];   Bf_iA[1][1] = Gyj*f_Ai[1][1];   Bf_iA[1][2] = Gyj*f_Ai[2][1];
+				Bf_iA[2][0] = Gzj*f_Ai[0][2];   Bf_iA[2][1] = Gzj*f_Ai[1][2];   Bf_iA[2][2] = Gzj*f_Ai[2][2];
+				Bf_iA[3][0] = Gyj*f_Ai[0][0] + Gxj*f_Ai[0][1];
+				Bf_iA[3][1] = Gyj*f_Ai[1][0] + Gxj*f_Ai[1][1];
+				Bf_iA[3][2] = Gyj*f_Ai[2][0] + Gxj*f_Ai[2][1];
+				Bf_iA[4][0] = Gzj*f_Ai[0][1] + Gyj*f_Ai[0][2];
+				Bf_iA[4][1] = Gzj*f_Ai[1][1] + Gyj*f_Ai[1][2];
+				Bf_iA[4][2] = Gzj*f_Ai[2][1] + Gyj*f_Ai[2][2];
+				Bf_iA[5][0] = Gzj*f_Ai[0][0] + Gxj*f_Ai[0][2];
+				Bf_iA[5][1] = Gzj*f_Ai[1][0] + Gxj*f_Ai[1][2];
+				Bf_iA[5][2] = Gzj*f_Ai[2][0] + Gxj*f_Ai[2][2];
 
-				DBL[1][0] = (D[1][0]*Gxj+D[1][3]*Gyj+D[1][5]*Gzj);
-				DBL[1][1] = (D[1][1]*Gyj+D[1][3]*Gxj+D[1][4]*Gzj);
-				DBL[1][2] = (D[1][2]*Gzj+D[1][4]*Gyj+D[1][5]*Gxj);
+				// **MCLS** calculate D*B*(f_Ai)^T matrices
+				DBf_iA[0][0] = D[0][0]*Bf_iA[0][0] + D[0][1]*Bf_iA[1][0] + D[0][2]*Bf_iA[2][0] + D[0][3]*Bf_iA[3][0] + D[0][4]*Bf_iA[4][0] + D[0][5]*Bf_iA[5][0];
+				DBf_iA[0][1] = D[0][0]*Bf_iA[0][1] + D[0][1]*Bf_iA[1][1] + D[0][2]*Bf_iA[2][1] + D[0][3]*Bf_iA[3][1] + D[0][4]*Bf_iA[4][1] + D[0][5]*Bf_iA[5][1];
+				DBf_iA[0][2] = D[0][0]*Bf_iA[0][2] + D[0][1]*Bf_iA[1][2] + D[0][2]*Bf_iA[2][2] + D[0][3]*Bf_iA[3][2] + D[0][4]*Bf_iA[4][2] + D[0][5]*Bf_iA[5][2];
 
-				DBL[2][0] = (D[2][0]*Gxj+D[2][3]*Gyj+D[2][5]*Gzj);
-				DBL[2][1] = (D[2][1]*Gyj+D[2][3]*Gxj+D[2][4]*Gzj);
-				DBL[2][2] = (D[2][2]*Gzj+D[2][4]*Gyj+D[2][5]*Gxj);
+				DBf_iA[1][0] = D[1][0]*Bf_iA[0][0] + D[1][1]*Bf_iA[1][0] + D[1][2]*Bf_iA[2][0] + D[1][3]*Bf_iA[3][0] + D[1][4]*Bf_iA[4][0] + D[1][5]*Bf_iA[5][0];
+				DBf_iA[1][1] = D[1][0]*Bf_iA[0][1] + D[1][1]*Bf_iA[1][1] + D[1][2]*Bf_iA[2][1] + D[1][3]*Bf_iA[3][1] + D[1][4]*Bf_iA[4][1] + D[1][5]*Bf_iA[5][1];
+				DBf_iA[1][2] = D[1][0]*Bf_iA[0][2] + D[1][1]*Bf_iA[1][2] + D[1][2]*Bf_iA[2][2] + D[1][3]*Bf_iA[3][2] + D[1][4]*Bf_iA[4][2] + D[1][5]*Bf_iA[5][2];
 
-				DBL[3][0] = (D[3][0]*Gxj+D[3][3]*Gyj+D[3][5]*Gzj);
-				DBL[3][1] = (D[3][1]*Gyj+D[3][3]*Gxj+D[3][4]*Gzj);
-				DBL[3][2] = (D[3][2]*Gzj+D[3][4]*Gyj+D[3][5]*Gxj);
+				DBf_iA[2][0] = D[2][0]*Bf_iA[0][0] + D[2][1]*Bf_iA[1][0] + D[2][2]*Bf_iA[2][0] + D[2][3]*Bf_iA[3][0] + D[2][4]*Bf_iA[4][0] + D[2][5]*Bf_iA[5][0];
+				DBf_iA[2][1] = D[2][0]*Bf_iA[0][1] + D[2][1]*Bf_iA[1][1] + D[2][2]*Bf_iA[2][1] + D[2][3]*Bf_iA[3][1] + D[2][4]*Bf_iA[4][1] + D[2][5]*Bf_iA[5][1];
+				DBf_iA[2][2] = D[2][0]*Bf_iA[0][2] + D[2][1]*Bf_iA[1][2] + D[2][2]*Bf_iA[2][2] + D[2][3]*Bf_iA[3][2] + D[2][4]*Bf_iA[4][2] + D[2][5]*Bf_iA[5][2];
 
-				DBL[4][0] = (D[4][0]*Gxj+D[4][3]*Gyj+D[4][5]*Gzj);
-				DBL[4][1] = (D[4][1]*Gyj+D[4][3]*Gxj+D[4][4]*Gzj);
-				DBL[4][2] = (D[4][2]*Gzj+D[4][4]*Gyj+D[4][5]*Gxj);
+				DBf_iA[3][0] = D[3][0]*Bf_iA[0][0] + D[3][1]*Bf_iA[1][0] + D[3][2]*Bf_iA[2][0] + D[3][3]*Bf_iA[3][0] + D[3][4]*Bf_iA[4][0] + D[3][5]*Bf_iA[5][0];
+				DBf_iA[3][1] = D[3][0]*Bf_iA[0][1] + D[3][1]*Bf_iA[1][1] + D[3][2]*Bf_iA[2][1] + D[3][3]*Bf_iA[3][1] + D[3][4]*Bf_iA[4][1] + D[3][5]*Bf_iA[5][1];
+				DBf_iA[3][2] = D[3][0]*Bf_iA[0][2] + D[3][1]*Bf_iA[1][2] + D[3][2]*Bf_iA[2][2] + D[3][3]*Bf_iA[3][2] + D[3][4]*Bf_iA[4][2] + D[3][5]*Bf_iA[5][2];
 
-				DBL[5][0] = (D[5][0]*Gxj+D[5][3]*Gyj+D[5][5]*Gzj);
-				DBL[5][1] = (D[5][1]*Gyj+D[5][3]*Gxj+D[5][4]*Gzj);
-				DBL[5][2] = (D[5][2]*Gzj+D[5][4]*Gyj+D[5][5]*Gxj);
+				DBf_iA[4][0] = D[4][0]*Bf_iA[0][0] + D[4][1]*Bf_iA[1][0] + D[4][2]*Bf_iA[2][0] + D[4][3]*Bf_iA[3][0] + D[4][4]*Bf_iA[4][0] + D[4][5]*Bf_iA[5][0];
+				DBf_iA[4][1] = D[4][0]*Bf_iA[0][1] + D[4][1]*Bf_iA[1][1] + D[4][2]*Bf_iA[2][1] + D[4][3]*Bf_iA[3][1] + D[4][4]*Bf_iA[4][1] + D[4][5]*Bf_iA[5][1];
+				DBf_iA[4][2] = D[4][0]*Bf_iA[0][2] + D[4][1]*Bf_iA[1][2] + D[4][2]*Bf_iA[2][2] + D[4][3]*Bf_iA[3][2] + D[4][4]*Bf_iA[4][2] + D[4][5]*Bf_iA[5][2];
 
-				ke[i3  ][j3  ] += (Gxi*DBL[0][0] + Gyi*DBL[3][0] + Gzi*DBL[5][0] )*detJt;
-				ke[i3  ][j3+1] += (Gxi*DBL[0][1] + Gyi*DBL[3][1] + Gzi*DBL[5][1] )*detJt;
-				ke[i3  ][j3+2] += (Gxi*DBL[0][2] + Gyi*DBL[3][2] + Gzi*DBL[5][2] )*detJt;
+				DBf_iA[5][0] = D[5][0]*Bf_iA[0][0] + D[5][1]*Bf_iA[1][0] + D[5][2]*Bf_iA[2][0] + D[5][3]*Bf_iA[3][0] + D[5][4]*Bf_iA[4][0] + D[5][5]*Bf_iA[5][0];
+				DBf_iA[5][1] = D[5][0]*Bf_iA[0][1] + D[5][1]*Bf_iA[1][1] + D[5][2]*Bf_iA[2][1] + D[5][3]*Bf_iA[3][1] + D[5][4]*Bf_iA[4][1] + D[5][5]*Bf_iA[5][1];
+				DBf_iA[5][2] = D[5][0]*Bf_iA[0][2] + D[5][1]*Bf_iA[1][2] + D[5][2]*Bf_iA[2][2] + D[5][3]*Bf_iA[3][2] + D[5][4]*Bf_iA[4][2] + D[5][5]*Bf_iA[5][2];
 
-				ke[i3+1][j3  ] += (Gyi*DBL[1][0] + Gxi*DBL[3][0] + Gzi*DBL[4][0] )*detJt;
-				ke[i3+1][j3+1] += (Gyi*DBL[1][1] + Gxi*DBL[3][1] + Gzi*DBL[4][1] )*detJt;
-				ke[i3+1][j3+2] += (Gyi*DBL[1][2] + Gxi*DBL[3][2] + Gzi*DBL[4][2] )*detJt;
+				// **MCLS** calculate c_ik*(B_j)^T*D_jklm*B_l*(f_Am)^T matrices. Also multiply by the constants -2*det_f_Ai*detJ0_element
+				ke[i3  ][j3  ] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,0)*DBf_iA[0][0] + Gyi*c_ij(1,0)*DBf_iA[1][0] + Gzi*c_ij(2,0)*DBf_iA[2][0] + (Gyi*c_ij(0,0) + Gxi*c_ij(1,0))*DBf_iA[3][0] + (Gzi*c_ij(1,0) + Gyi*c_ij(2,0))*DBf_iA[4][0] + (Gzi*c_ij(0,0) + Gxi*c_ij(2,0))*DBf_iA[5][0]);
+				ke[i3+1][j3  ] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,1)*DBf_iA[0][0] + Gyi*c_ij(1,1)*DBf_iA[1][0] + Gzi*c_ij(2,1)*DBf_iA[2][0] + (Gyi*c_ij(0,1) + Gxi*c_ij(1,1))*DBf_iA[3][0] + (Gzi*c_ij(1,1) + Gyi*c_ij(2,1))*DBf_iA[4][0] + (Gzi*c_ij(0,1) + Gxi*c_ij(2,1))*DBf_iA[5][0]);
+				ke[i3+2][j3  ] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,2)*DBf_iA[0][0] + Gyi*c_ij(1,2)*DBf_iA[1][0] + Gzi*c_ij(2,2)*DBf_iA[2][0] + (Gyi*c_ij(0,2) + Gxi*c_ij(1,2))*DBf_iA[3][0] + (Gzi*c_ij(1,2) + Gyi*c_ij(2,2))*DBf_iA[4][0] + (Gzi*c_ij(0,2) + Gxi*c_ij(2,2))*DBf_iA[5][0]);
+				// -------
+				ke[i3  ][j3+1] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,0)*DBf_iA[0][1] + Gyi*c_ij(1,0)*DBf_iA[1][1] + Gzi*c_ij(2,0)*DBf_iA[2][1] + (Gyi*c_ij(0,0) + Gxi*c_ij(1,0))*DBf_iA[3][1] + (Gzi*c_ij(1,0) + Gyi*c_ij(2,0))*DBf_iA[4][1] + (Gzi*c_ij(0,0) + Gxi*c_ij(2,0))*DBf_iA[5][1]);
+				ke[i3+1][j3+1] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,1)*DBf_iA[0][1] + Gyi*c_ij(1,1)*DBf_iA[1][1] + Gzi*c_ij(2,1)*DBf_iA[2][1] + (Gyi*c_ij(0,1) + Gxi*c_ij(1,1))*DBf_iA[3][1] + (Gzi*c_ij(1,1) + Gyi*c_ij(2,1))*DBf_iA[4][1] + (Gzi*c_ij(0,1) + Gxi*c_ij(2,1))*DBf_iA[5][1]);
+				ke[i3+2][j3+1] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,2)*DBf_iA[0][1] + Gyi*c_ij(1,2)*DBf_iA[1][1] + Gzi*c_ij(2,2)*DBf_iA[2][1] + (Gyi*c_ij(0,2) + Gxi*c_ij(1,2))*DBf_iA[3][1] + (Gzi*c_ij(1,2) + Gyi*c_ij(2,2))*DBf_iA[4][1] + (Gzi*c_ij(0,2) + Gxi*c_ij(2,2))*DBf_iA[5][1]);
+				// -------
+				ke[i3  ][j3+2] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,0)*DBf_iA[0][2] + Gyi*c_ij(1,0)*DBf_iA[1][2] + Gzi*c_ij(2,0)*DBf_iA[2][2] + (Gyi*c_ij(0,0) + Gxi*c_ij(1,0))*DBf_iA[3][2] + (Gzi*c_ij(1,0) + Gyi*c_ij(2,0))*DBf_iA[4][2] + (Gzi*c_ij(0,0) + Gxi*c_ij(2,0))*DBf_iA[5][2]);
+				ke[i3+1][j3+2] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,1)*DBf_iA[0][2] + Gyi*c_ij(1,1)*DBf_iA[1][2] + Gzi*c_ij(2,1)*DBf_iA[2][2] + (Gyi*c_ij(0,1) + Gxi*c_ij(1,1))*DBf_iA[3][2] + (Gzi*c_ij(1,1) + Gyi*c_ij(2,1))*DBf_iA[4][2] + (Gzi*c_ij(0,1) + Gxi*c_ij(2,1))*DBf_iA[5][2]);
+				ke[i3+2][j3+2] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,2)*DBf_iA[0][2] + Gyi*c_ij(1,2)*DBf_iA[1][2] + Gzi*c_ij(2,2)*DBf_iA[2][2] + (Gyi*c_ij(0,2) + Gxi*c_ij(1,2))*DBf_iA[3][2] + (Gzi*c_ij(1,2) + Gyi*c_ij(2,2))*DBf_iA[4][2] + (Gzi*c_ij(0,2) + Gxi*c_ij(2,2))*DBf_iA[5][2]);
 
-				ke[i3+2][j3  ] += (Gzi*DBL[2][0] + Gyi*DBL[4][0] + Gxi*DBL[5][0] )*detJt;
-				ke[i3+2][j3+1] += (Gzi*DBL[2][1] + Gyi*DBL[4][1] + Gxi*DBL[5][1] )*detJt;
-				ke[i3+2][j3+2] += (Gzi*DBL[2][2] + Gyi*DBL[4][2] + Gxi*DBL[5][2] )*detJt;
+				// **MCLS** calculate (dN/dx_i)*c_ij*D_jklm*B_l*(f_Am)^T matrices. Also multiply by the constants -2*det_f_Ai*detJ0_element
+				ke[i3  ][j3  ] += -2*det_f_Ai*detJ0_element*(dNdxi_cij[0]*DBf_iA[0][0] + dNdxi_cij[1]*DBf_iA[3][0] + dNdxi_cij[2]*DBf_iA[5][0]);
+				ke[i3+1][j3  ] += -2*det_f_Ai*detJ0_element*(dNdxi_cij[1]*DBf_iA[1][0] + dNdxi_cij[0]*DBf_iA[3][0] + dNdxi_cij[2]*DBf_iA[4][0]);
+				ke[i3+2][j3  ] += -2*det_f_Ai*detJ0_element*(dNdxi_cij[2]*DBf_iA[2][0] + dNdxi_cij[1]*DBf_iA[4][0] + dNdxi_cij[0]*DBf_iA[5][0]);
+				// -------
+				ke[i3  ][j3+1] += -2*det_f_Ai*detJ0_element*(dNdxi_cij[0]*DBf_iA[0][1] + dNdxi_cij[1]*DBf_iA[3][1] + dNdxi_cij[2]*DBf_iA[5][1]);
+				ke[i3+1][j3+1] += -2*det_f_Ai*detJ0_element*(dNdxi_cij[1]*DBf_iA[1][1] + dNdxi_cij[0]*DBf_iA[3][1] + dNdxi_cij[2]*DBf_iA[4][1]);
+				ke[i3+2][j3+1] += -2*det_f_Ai*detJ0_element*(dNdxi_cij[2]*DBf_iA[2][1] + dNdxi_cij[1]*DBf_iA[4][1] + dNdxi_cij[0]*DBf_iA[5][1]);
+
+				// **MCLS** calculate c_jk*D_jklm*B_l*(f_Am)^T Note that this is a vector.
+				ke_dev[0]  = c_ij(0,0)*DBf_iA[0][0] + c_ij(1,0)*DBf_iA[3][0] + c_ij(2,0)*DBf_iA[5][0];
+				ke_dev[0] += c_ij(1,1)*DBf_iA[1][0] + c_ij(0,1)*DBf_iA[3][0] + c_ij(2,1)*DBf_iA[4][0];
+				ke_dev[0] += c_ij(2,2)*DBf_iA[2][0] + c_ij(1,1)*DBf_iA[4][0] + c_ij(0,2)*DBf_iA[5][0];
+				// -------
+				ke_dev[1]  = c_ij(0,0)*DBf_iA[0][1] + c_ij(1,0)*DBf_iA[3][1] + c_ij(2,0)*DBf_iA[5][1];
+				ke_dev[1] += c_ij(1,1)*DBf_iA[1][1] + c_ij(0,1)*DBf_iA[3][1] + c_ij(2,1)*DBf_iA[4][1];
+				ke_dev[1] += c_ij(2,2)*DBf_iA[2][1] + c_ij(1,1)*DBf_iA[4][1] + c_ij(0,2)*DBf_iA[5][1];
+				// -------
+				ke_dev[2]  = c_ij(0,0)*DBf_iA[0][2] + c_ij(1,0)*DBf_iA[3][2] + c_ij(2,0)*DBf_iA[5][2];
+				ke_dev[2] += c_ij(1,1)*DBf_iA[1][2] + c_ij(0,1)*DBf_iA[3][2] + c_ij(2,1)*DBf_iA[4][2];
+				ke_dev[2] += c_ij(2,2)*DBf_iA[2][2] + c_ij(1,1)*DBf_iA[4][2] + c_ij(0,2)*DBf_iA[5][2];
+
+				// **MCLS** Using ke_dev, calculate -(1/3)*I_mn*(dN/dx_m)*c_jk*D_jklm*B_l*(f_Am)^T This can also be written as -(1/3)*I_mn*(dN/dx_m)*(ke_dev)_A
+				// Also multiply by the constants -2*det_f_Ai*detJ0_element
+				ke[i3  ][j3  ] += det_f_Ai*detJ0_element*(2./3.)*Gxi*ke_dev[0];
+				ke[i3+1][j3  ] += det_f_Ai*detJ0_element*(2./3.)*Gyi*ke_dev[0];
+				ke[i3+2][j3  ] += det_f_Ai*detJ0_element*(2./3.)*Gzi*ke_dev[0];
+				// -------
+				ke[i3  ][j3+1] += det_f_Ai*detJ0_element*(2./3.)*Gxi*ke_dev[1];
+				ke[i3+1][j3+1] += det_f_Ai*detJ0_element*(2./3.)*Gyi*ke_dev[1];
+				ke[i3+2][j3+1] += det_f_Ai*detJ0_element*(2./3.)*Gzi*ke_dev[1];
+				// -------
+				ke[i3  ][j3+2] += det_f_Ai*detJ0_element*(2./3.)*Gxi*ke_dev[2];
+				ke[i3+1][j3+2] += det_f_Ai*detJ0_element*(2./3.)*Gyi*ke_dev[2];
+				ke[i3+2][j3+2] += det_f_Ai*detJ0_element*(2./3.)*Gzi*ke_dev[2];
+
+				// Finally, multiply by the constants -2*det_f_Ai and detJ0_element to complete the expression.
 			}
 		}
 	}
 }
+
+// //-----------------------------------------------------------------------------
+// //! calculates element's geometrical stiffness component for each integration point
+
+// void FE3FieldElasticSolidDomain::ElementGeometricalStiffness(int iel, matrix &ke)
+// {
+// 	FESolidElement &el = Element(iel);
+
+// 	const int NME = FEElement::MAX_NODES;
+// 	double Gx[NME], Gy[NME], Gz[NME];
+// 	double *Grn, *Gsn, *Gtn;
+// 	double Gr, Gs, Gt;
+
+// 	// nr of nodes
+// 	int neln = el.Nodes();
+
+// 	// nr of integration points
+// 	int nint = el.GaussPoints();
+
+// 	// jacobian
+// 	double Ji[3][3], detJt;
+
+// 	// weights at gauss points
+// 	const double *gw = el.GaussWeights();
+
+// 	// stiffness component for the initial stress component of stiffness matrix
+// 	double kab;
+
+// 	// calculate geometrical element stiffness matrix
+// 	for (int n=0; n<nint; ++n)
+// 	{
+// 		// calculate jacobian
+// 		detJt = invjact(el, Ji, n, m_alphaf)*gw[n]*m_alphaf;
+
+// 		Grn = el.Gr(n);
+// 		Gsn = el.Gs(n);
+// 		Gtn = el.Gt(n);
+
+// 		for (int i = 0; i<neln; ++i)
+// 		{
+// 			Gr = Grn[i];
+// 			Gs = Gsn[i];
+// 			Gt = Gtn[i];
+
+// 			// calculate global gradient of shape functions
+// 			// note that we need the transposed of Ji, not Ji itself !
+// 			Gx[i] = Ji[0][0]*Gr+Ji[1][0]*Gs+Ji[2][0]*Gt;
+// 			Gy[i] = Ji[0][1]*Gr+Ji[1][1]*Gs+Ji[2][1]*Gt;
+// 			Gz[i] = Ji[0][2]*Gr+Ji[1][2]*Gs+Ji[2][2]*Gt;
+// 		}
+
+// 		// get the material point data
+// 		FEMaterialPoint& mp = *el.GetMaterialPoint(n);
+// 		FEElasticMaterialPoint& pt = *(mp.ExtractData<FEElasticMaterialPoint>());
+
+// 		// element's Cauchy-stress tensor at gauss point n
+// 		// s is the voight vector
+// 		mat3ds& s = pt.m_s;
+
+// 		for (int i = 0; i<neln; ++i)
+// 			for (int j = i; j<neln; ++j)
+// 			{
+// 				kab = (Gx[i]*(s.xx()*Gx[j]+s.xy()*Gy[j]+s.xz()*Gz[j]) +
+// 					   Gy[i]*(s.xy()*Gx[j]+s.yy()*Gy[j]+s.yz()*Gz[j]) + 
+// 					   Gz[i]*(s.xz()*Gx[j]+s.yz()*Gy[j]+s.zz()*Gz[j]))*detJt;
+
+// 				ke[3*i  ][3*j  ] += kab;
+// 				ke[3*i+1][3*j+1] += kab;
+// 				ke[3*i+2][3*j+2] += kab;
+// 			}
+// 	}
+// }
 
 //-----------------------------------------------------------------------------
 //! calculates element's geometrical stiffness component for each integration point
@@ -502,8 +759,8 @@ void FE3FieldElasticSolidDomain::ElementGeometricalStiffness(int iel, matrix &ke
 	// nr of integration points
 	int nint = el.GaussPoints();
 
-	// jacobian
-	double j_i[3][3], det_j0;
+	// jacobian of the element and it's determinant
+	double j_i[3][3], detJ0_element;
 
 	// Initalize terms used below.
 	double term1[3], term2[3];
@@ -532,7 +789,8 @@ void FE3FieldElasticSolidDomain::ElementGeometricalStiffness(int iel, matrix &ke
 		// **MCLS** This changed because the shape function gradient (G) is taken with respect to the known current configuration.
 		// The current configuration is defined with respect to the node positions defined from the input (i.e. the originally defined mesh).
 		// This change is needed because the original code has the reference configuration is known
-		det_j0 = invjac0(el, j_i, n);//*gw[n]*m_alphaf;
+		// Note that the Gauss weights are incorporated here.
+		detJ0_element = invjac0(el, j_i, n)*gw[n]*m_alphaf;
 
 		// **MCLS** Calculate the inverse of the inverse deformation gradient.
 		// i.e. this is the deformation gradient that is traditionally used.
@@ -546,10 +804,9 @@ void FE3FieldElasticSolidDomain::ElementGeometricalStiffness(int iel, matrix &ke
     	// See eq. 1.137, 1.138 on pg 62 and 63 in Kim, Introduction to Nonlinear Finite Element Analysis.
 		for (int i = 0; i<neln; ++i)
 		{
-			// Incorporate the Gauss weights here
-			Gr = Grn[i]*gw[n]*m_alphaf;
-			Gs = Gsn[i]*gw[n]*m_alphaf;
-			Gt = Gtn[i]*gw[n]*m_alphaf;
+			Gr = Grn[i];
+			Gs = Gsn[i];
+			Gt = Gtn[i];
 
 			// calculate global gradient of shape functions
 			// note that we need the transposed of j_i, not j_i itself !
@@ -580,17 +837,17 @@ void FE3FieldElasticSolidDomain::ElementGeometricalStiffness(int iel, matrix &ke
 				term2[1] = Gx[j]*F_iA[0][1] + Gy[j]*F_iA[1][1] + Gz[j]*F_iA[2][1];
 				term2[2] = Gx[j]*F_iA[0][2] + Gy[j]*F_iA[1][2] + Gz[j]*F_iA[2][2];
 
-				ke[i3  ][j3  ] += term1[0]*term2[0];
-				ke[i3  ][j3+1] += term1[0]*term2[1];
-				ke[i3  ][j3+2] += term1[0]*term2[2];
+				ke[i3  ][j3  ] += term1[0]*term2[0]*detJ0_element;
+				ke[i3  ][j3+1] += term1[0]*term2[1]*detJ0_element;
+				ke[i3  ][j3+2] += term1[0]*term2[2]*detJ0_element;
 
-				ke[i3+1][j3  ] += term1[1]*term2[0];
-				ke[i3+1][j3+1] += term1[1]*term2[1];
-				ke[i3+1][j3+2] += term1[1]*term2[2];
+				ke[i3+1][j3  ] += term1[1]*term2[0]*detJ0_element;
+				ke[i3+1][j3+1] += term1[1]*term2[1]*detJ0_element;
+				ke[i3+1][j3+2] += term1[1]*term2[2]*detJ0_element;
 
-				ke[i3+2][j3  ] += term1[2]*term2[0];
-				ke[i3+2][j3+1] += term1[2]*term2[1];
-				ke[i3+2][j3+2] += term1[2]*term2[2];
+				ke[i3+2][j3  ] += term1[2]*term2[0]*detJ0_element;
+				ke[i3+2][j3+1] += term1[2]*term2[1]*detJ0_element;
+				ke[i3+2][j3+2] += term1[2]*term2[2]*detJ0_element;
 			}
 	}
 }

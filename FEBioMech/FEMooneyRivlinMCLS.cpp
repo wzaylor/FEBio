@@ -98,8 +98,8 @@ tens4ds FEMooneyRivlinMCLS::DevTangent(FEMaterialPoint& mp)
 	double det_f_Ai_23 = pow(pt.m_J, 2./3.);
 	double det_f_Ai_43 = pow(pt.m_J, 4./3.);
 
-	// calculate deviatoric left Cauchy-Green tensor: B = F*Ft
-	mat3ds b_ij = pt.DevLeftCauchyGreenMCLS();
+	// calculate left Cauchy-Green tensor: B = F*Ft
+	mat3ds b_ij = pt.LeftCauchyGreenMCLS();
 	mat3ds b_ij_squared = b_ij.sqr(); // b^ik g_kl b^lj
 	mat3ds b_ij_cubed; // (b^3)^ij = b^ik g_kl b^lm g_mn b^nj
 	// Define b_ij_cubed
