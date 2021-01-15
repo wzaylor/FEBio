@@ -157,6 +157,9 @@ void FE3FieldElasticSolidDomain::StiffnessMatrix(FELinearSystem& LS)
 		// Calculate dilatational stiffness
 		ElementDilatationalStiffness(fem, iel, ke);
 
+		// **MCLS** The "strain" matrix
+		ElementStrainStiffness(iel, ke);
+
 		// assign symmetic parts
 		// TODO: Can this be omitted by changing the Assemble routine so that it only
 		// grabs elements from the upper diagonal matrix?
@@ -766,7 +769,7 @@ void FE3FieldElasticSolidDomain::ElementMaterialStiffness(int iel, matrix &ke)
 
 //-----------------------------------------------------------------------------
 //! calculates element's geometrical stiffness component for each integration point
-
+// **MCLS**
 void FE3FieldElasticSolidDomain::ElementGeometricalStiffness(int iel, matrix &ke)
 {
 	FESolidElement &el = Element(iel);
@@ -873,6 +876,109 @@ void FE3FieldElasticSolidDomain::ElementGeometricalStiffness(int iel, matrix &ke
 				ke[i3+2][j3+1] += term1[2]*term2[1]*detJ0_element;
 				ke[i3+2][j3+2] += term1[2]*term2[2]*detJ0_element;
 			}
+	}
+}
+
+//-----------------------------------------------------------------------------
+//! calculates element's "strain" stiffness component for each integration point
+// The name of this stiffness matrix is likely wrong.
+// **MCLS**
+void FE3FieldElasticSolidDomain::ElementStrainStiffness(int iel, matrix &ke)
+{
+	FESolidElement &el = Element(iel);
+	ELEM_DATA& ed = m_Data[iel];
+
+	// Get the current element's data
+	const int nint = el.GaussPoints();
+	const int neln = el.Nodes();
+	const int ndof = 3*neln;
+
+	// global derivatives of shape functions
+	const int NME = FEElement::MAX_NODES;
+	vec3d G[NME];
+
+	// The shape function derivative values
+	double Gxi, Gyi, Gzi;
+	double Gxj, Gyj, Gzj;
+	// The determinant of the element's jacobian.
+	double detJ0_element;
+
+	// Initalize terms used below.
+	double term1[3], term2[3];
+
+	// **MCLS** The inverse deformation gradient.
+	mat3d f_Ai;
+
+	// **MCLS** The left Cauchy-Green and Finger deformation tensors.
+	mat3ds b_ij; // The left Cauchy-Green deformation tensor b^ij
+
+	// **MCLS** The Cauchy stress tensor
+	mat3ds s_ij;
+
+	// The determinant of the inverse deformation gradient (j=1/J)
+	double det_f_Ai;
+
+	// Terms used to break up the calculation in to smaller parts -------------------
+	// -------------------------------------------------------------------------------
+	// **MCLS** a_ij = b^ia g_ab s_bj
+	mat3d bs_ij;
+
+	// **MCLS** 
+	mat3d term1;
+
+	// -------------------------------------------------------------------------------
+
+	// weights at gauss points
+	const double *gw = el.GaussWeights();
+
+	// calculate element stiffness matrix
+	for (int n=0; n<nint; ++n)
+	{
+		// setup the material point
+		// NOTE: deformation gradient and determinant have already been evaluated in the stress routine
+		FEMaterialPoint& mp = *el.GetMaterialPoint(n);
+		FEElasticMaterialPoint& pt = *(mp.ExtractData<FEElasticMaterialPoint>());
+
+		// calculate shape function gradients and jacobian
+		// **MCLS** This changed because the shape function gradient (G) is taken with respect to the known current configuration.
+		// The current configuration is defined with respect to the node positions defined from the input (i.e. the originally defined mesh).
+		// This change is needed because the original code has the reference configuration is known
+		// Note that the Gauss weights are incorporated here.
+		detJ0_element = ShapeGradient0(el, n, G)*gw[n]*m_alphaf;
+
+		// **MCLS** Define the inverse deformation gradient (f_Ai).
+		// Note that the code doesn't need to calculate the inverse.
+		// The inverse deformation gradient is calculated using the original code.
+		// The inverse gradient is calculated because we are taking the original known node positions to be in the deformed configuration, and taking the displacements to be defining the node positions in the reference configuration.
+		det_f_Ai = defgrad(el, f_Ai, n);
+
+		// **MCLS** define the Finger deformation tensor.
+		b_ij = pt.LeftCauchyGreenMCLS();
+
+		// **MCLS** Populate bs_ij
+		bs_ij = b_ij*s_ij;
+		mat3d x = f_Ai*bs_ij;
+
+		// **MCLS** ke is not symmetric
+		for (int i=0, i3=0; i<neln; ++i, i3 += 3)
+		{
+			Gxi = G[i].x;
+			Gyi = G[i].y;
+			Gzi = G[i].z;
+
+			// **MCLS** ke is not symmetric, so j is iterated from 0 to neln
+			for (int j=0, j3 = 0; j<neln; ++j, j3 += 3)
+			{
+				Gxj = G[j].x;
+				Gyj = G[j].y;
+				Gzj = G[j].z;
+
+				term1 = f_Ai*bs_ij;
+				// ke[i3  ][j3  ] += 0.5*(Gxi*Gxj + Gyi*Gyj + Gzi*Gzj)*(f_Ai(0,0)*bs_ij(0,0) + f_Ai(0,1)*bs_ij(1,0));
+				// ke[i3  ][j3+1] += 3;
+				// ke[i3  ][j3+2] += 3;
+			}
+		}
 	}
 }
 
