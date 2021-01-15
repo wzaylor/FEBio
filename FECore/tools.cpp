@@ -388,7 +388,7 @@ double golden(double ax, double bx, double cx, double(*f)(double), double tol, d
 double zbrent(double func(double, void*), double x1, double x2, double tol, void* data)
 {
 	const int ITMAX = 100;
-	const double EPS = DBL_EPSILON;
+	const double EPS = __DBL_EPSILON__; // **MCLS** This was changed from DBL_EPSILON to __DBL_EPSILON__
 	int iter;
 	double a=x1, b=x2, c=x2, d, e, min1, min2;
 	double fa=func(a, data), fb = func(b, data), fc, p, q, r, s, tol1, xm;

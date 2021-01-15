@@ -204,7 +204,9 @@ void FEElasticSolidDomain::ElementInternalForce(FESolidElement& el, vector<doubl
 		FEElasticMaterialPoint& pt = *(mp.ExtractData<FEElasticMaterialPoint>());
 
 		// calculate the jacobian
-		double detJt = (m_update_dynamic ? invjact(el, Ji, n, m_alphaf) : invjact(el, Ji, n));
+		// **MCLS** Get the inverse Jacobian relative to the given deformed configuration.
+		// double detJt = (m_update_dynamic ? invjact(el, Ji, n, m_alphaf) : invjact(el, Ji, n));
+		double detJt = (m_update_dynamic ? throw FatalError() : invjac0(el, Ji, n));
 
 		detJt *= gw[n];
 

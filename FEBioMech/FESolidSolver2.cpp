@@ -674,6 +674,22 @@ void FESolidSolver2::PrepStep()
 	// we save the prescribed displacements increments in the ui vector
 	vector<double>& ui = m_ui;
 	zero(ui);
+
+	// **MCLS** This is here for debugging to specify a set of displacements
+	// ui[0] = 1.;
+	// ui[1] = 1.;
+	// ui[2] = 1.;
+	// ui[3] = 1.;
+	// ui[4] = 1.;
+	// ui[5] = 1.;
+	// ui[6] = 1.;
+	// ui[7] = 1.;
+	// ui[8] = 1.;
+	// ui[9] = 1.;
+	// ui[10] = 1.;
+	// ui[11] = 1.;
+	// Update(ui);
+
 	int nbc = fem.BoundaryConditions();
 	for (int i=0; i<nbc; ++i)
 	{

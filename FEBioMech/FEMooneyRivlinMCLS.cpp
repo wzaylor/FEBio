@@ -71,7 +71,7 @@ mat3ds FEMooneyRivlinMCLS::DevStress(FEMaterialPoint& mp)
 	partial_I2_cij += -j_43*(1./3.)*b_ij_squared.tr()*identity;
 
 	partial_I2_cij += -j_43*I1*b_ij;
-	partial_I2_cij += j_43*I1*I1*identity;
+	partial_I2_cij += j_43*(1./3.)*I1*I1*identity;
 
 	// Calculate deviatoricCauchyStress = -2*j*[(dW/dI1)(dI1/dc_ij) + (dW/dI2)(dI2/dc_ij)]
 	// Note that I1 and I2 in the above comment are \tilde{I1} and \tilde{I2}.

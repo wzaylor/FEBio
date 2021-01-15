@@ -270,74 +270,97 @@ void FE3FieldElasticSolidDomain::ElementDilatationalStiffness(FEModel& fem, int 
 	const int neln = elem.Nodes();
 	const int ndof = 3*neln;
 
+	// global derivatives of shape functions
+	const int NME = FEElement::MAX_NODES;
+	vec3d G[NME];
+
+	// The shape function derivative values
+	double Gxi, Gyi, Gzi;
+	double Gxj, Gyj, Gzj;
+	// The determinant of the element's jacobian.
+	double detJ0_element;
+
+	// **MCLS**
+	mat3d f_Ai; // The inverse deformation gradient.
+	mat3d F_iA; // The deformation gradient
+	double det_f_Ai_null; // This value isn't used, but it is needed because the function that calculates f_Ai returns a double.
+
 	// get the elements material
 	FEUncoupledMaterial* pmi = dynamic_cast<FEUncoupledMaterial*>(m_pMat);
 	assert(pmi);
 
-	// average global derivatives
-	vector<double> gradN(3*neln);
-	zero(gradN);
-
 	// **MCLS** element volume in the deformed configuration
-	double Ve_deformed = 0;
+	double ve_deformed = 0;
+
+	// get effective modulus
+	double d2UdJ2 = pmi->UJJ(ed.eJ); // (d^2U/dJ^2)
+
+	// next, we add the Lagrangian contribution
+	// note that this term will always be zero if the material does not
+	// use the augmented lagrangian
+	d2UdJ2 += ed.Lk*pmi->hpp(ed.eJ);
+
+	// divide by initial volume
+	// k /= Ve;
 
 	// global derivatives of shape functions
 	double Gx, Gy, Gz;
 	const double *gw = elem.GaussWeights();
 
-	// jacobian
-	double Ji[3][3]; // The jacobian matrix between the isoparametric element space and the current, deformed configuration
-	double detJ0_element; // The determinant of Ji
-	double det_fAi; // The determinant of the inverse deformation gradient
-
-	double *Gr, *Gs, *Gt;
-
-	// repeat over gauss-points
-	for (n=0; n<nint; ++n)
+	// calculate element stiffness matrix
+	for (int n=0; n<nint; ++n)
 	{
-		// calculate jacobian
-		J0 = detJ0(elem, n);
-		Jt = invjact(elem, Ji, n, m_alphaf)*m_alphaf;
+		// setup the material point
+		// NOTE: deformation gradient and determinant have already been evaluated in the stress routine
+		FEMaterialPoint& mp = *elem.GetMaterialPoint(n);
+		FEElasticMaterialPoint& pt = *(mp.ExtractData<FEElasticMaterialPoint>());
 
-		Jt *= gw[n];
+		// calculate shape function gradients and jacobian
+		// **MCLS** This changed because the shape function gradient (G) is taken with respect to the known current configuration.
+		// The current configuration is defined with respect to the node positions defined from the input (i.e. the originally defined mesh).
+		// This change is needed because the original code has the reference configuration is known
+		// Note that the Gauss weights are incorporated here.
+		detJ0_element = ShapeGradient0(elem, n, G)*gw[n]*m_alphaf;
 
-		Ve += J0*gw[n];
+		// **MCLS** Define the inverse deformation gradient (f_Ai).
+		// Note that the code doesn't need to calculate the inverse.
+		// The inverse deformation gradient is calculated using the original code.
+		// The inverse gradient is calculated because we are taking the original known node positions to be in the deformed configuration, and taking the displacements to be defining the node positions in the reference configuration.
+		det_f_Ai_null = defgrad(elem, f_Ai, n);
+		F_iA = f_Ai.inverse(); // The deformation gradient.
 
-		Gr = elem.Gr(n);
-		Gs = elem.Gs(n);
-		Gt = elem.Gt(n);
-
-		// calculate global gradient of shape functions
-		// note that we need the transposed of Ji, not Ji itself !
-		for (i=0; i<neln; ++i)
+		// **MCLS** ke is not symmetric.
+		for (int i = 0, i3 = 0; i<neln; ++i, i3 += 3)
 		{
-			Gx = Ji[0][0]*Gr[i]+Ji[1][0]*Gs[i]+Ji[2][0]*Gt[i];
-			Gy = Ji[0][1]*Gr[i]+Ji[1][1]*Gs[i]+Ji[2][1]*Gt[i];
-			Gz = Ji[0][2]*Gr[i]+Ji[1][2]*Gs[i]+Ji[2][2]*Gt[i];
+			Gxi = G[i].x;
+			Gyi = G[i].y;
+			Gzi = G[i].z;
 
-			gradN[3*i  ] += Gx*Jt;
-			gradN[3*i+1] += Gy*Jt;
-			gradN[3*i+2] += Gz*Jt;
+			// **MCLS** ke is not symmetric, so j is iterated from 0 to neln
+			for (int j=0, j3 = 0; j<neln; ++j, j3 += 3)
+			{
+				Gxj = G[j].x;
+				Gyj = G[j].y;
+				Gzj = G[j].z;
+
+				// **MCLS** ke_iA = -(d^2U/dJ^2)*J*F_mA*(dN/dx_m)*(dN/dx_i)
+				// Note that J in the above equation is the average Jacobian and not the Jacobian at the element node coordinate.
+				// Also multiply by detJ0_element
+				ke[i3  ][j3  ] += -d2UdJ2*ed.eJ*Gxi*detJ0_element*(Gxj*F_iA(0,0) + Gyj*F_iA(1,0) + Gzj*F_iA(2,0));
+				ke[i3+1][j3  ] += -d2UdJ2*ed.eJ*Gyi*detJ0_element*(Gxj*F_iA(0,0) + Gyj*F_iA(1,0) + Gzj*F_iA(2,0));
+				ke[i3+2][j3  ] += -d2UdJ2*ed.eJ*Gzi*detJ0_element*(Gxj*F_iA(0,0) + Gyj*F_iA(1,0) + Gzj*F_iA(2,0));
+				// -------
+				ke[i3  ][j3+1] += -d2UdJ2*ed.eJ*Gxi*detJ0_element*(Gxj*F_iA(0,1) + Gyj*F_iA(1,1) + Gzj*F_iA(2,1));
+				ke[i3+1][j3+1] += -d2UdJ2*ed.eJ*Gyi*detJ0_element*(Gxj*F_iA(0,1) + Gyj*F_iA(1,1) + Gzj*F_iA(2,1));
+				ke[i3+2][j3+1] += -d2UdJ2*ed.eJ*Gzi*detJ0_element*(Gxj*F_iA(0,1) + Gyj*F_iA(1,1) + Gzj*F_iA(2,1));
+				// -------
+				ke[i3  ][j3+2] += -d2UdJ2*ed.eJ*Gxi*detJ0_element*(Gxj*F_iA(0,2) + Gyj*F_iA(1,2) + Gzj*F_iA(2,2));
+				ke[i3+1][j3+2] += -d2UdJ2*ed.eJ*Gyi*detJ0_element*(Gxj*F_iA(0,2) + Gyj*F_iA(1,2) + Gzj*F_iA(2,2));
+				ke[i3+2][j3+2] += -d2UdJ2*ed.eJ*Gzi*detJ0_element*(Gxj*F_iA(0,2) + Gyj*F_iA(1,2) + Gzj*F_iA(2,2));
+
+			}
 		}
 	}
-
-	// get effective modulus
-	double k = pmi->UJJ(ed.eJ);
-
-	// next, we add the Lagrangian contribution
-	// note that this term will always be zero if the material does not
-	// use the augmented lagrangian
-	k += ed.Lk*pmi->hpp(ed.eJ);
-
-	// divide by initial volume
-	k /= Ve;
-
-	// calculate dilatational stiffness component
-	// we only calculate the upper triangular part
-	// since ke is symmetric.
-	for (i=0; i<ndof; ++i)
-		for (j=i; j<ndof; ++j)
-			ke[i][j] += k*gradN[i]*gradN[j];
 }
 
 // //-----------------------------------------------------------------------------
@@ -502,7 +525,7 @@ void FE3FieldElasticSolidDomain::ElementMaterialStiffness(int iel, matrix &ke)
 	// a_j = dN/dx_i c_ij (summing over repeated indices)
 	double dNdxi_cij[3];
 
-
+	// c_jk*D_jklm*B_l*(f_Am)^T Note the repeated indices and that this is a vector.
 	double ke_dev[3];
 
 	// -------------------------------------------------------------------------------
@@ -553,9 +576,7 @@ void FE3FieldElasticSolidDomain::ElementMaterialStiffness(int iel, matrix &ke)
 		// get the 'D' matrix
 		C.extract(D);
 
-		// we only calculate the upper triangular part
-		// since ke is symmetric. The other part is
-		// determined below using this symmetry.
+		// **MCLS** ke is not symmetric.
 		for (int i = 0, i3 = 0; i<neln; ++i, i3 += 3)
 		{
 			Gxi = G[i].x;
@@ -614,26 +635,30 @@ void FE3FieldElasticSolidDomain::ElementMaterialStiffness(int iel, matrix &ke)
 				DBf_iA[5][2] = D[5][0]*Bf_iA[0][2] + D[5][1]*Bf_iA[1][2] + D[5][2]*Bf_iA[2][2] + D[5][3]*Bf_iA[3][2] + D[5][4]*Bf_iA[4][2] + D[5][5]*Bf_iA[5][2];
 
 				// **MCLS** calculate c_ik*(B_j)^T*D_jklm*B_l*(f_Am)^T matrices. Also multiply by the constants -2*det_f_Ai*detJ0_element
-				ke[i3  ][j3  ] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,0)*DBf_iA[0][0] + Gyi*c_ij(1,0)*DBf_iA[1][0] + Gzi*c_ij(2,0)*DBf_iA[2][0] + (Gyi*c_ij(0,0) + Gxi*c_ij(1,0))*DBf_iA[3][0] + (Gzi*c_ij(1,0) + Gyi*c_ij(2,0))*DBf_iA[4][0] + (Gzi*c_ij(0,0) + Gxi*c_ij(2,0))*DBf_iA[5][0]);
-				ke[i3+1][j3  ] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,1)*DBf_iA[0][0] + Gyi*c_ij(1,1)*DBf_iA[1][0] + Gzi*c_ij(2,1)*DBf_iA[2][0] + (Gyi*c_ij(0,1) + Gxi*c_ij(1,1))*DBf_iA[3][0] + (Gzi*c_ij(1,1) + Gyi*c_ij(2,1))*DBf_iA[4][0] + (Gzi*c_ij(0,1) + Gxi*c_ij(2,1))*DBf_iA[5][0]);
-				ke[i3+2][j3  ] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,2)*DBf_iA[0][0] + Gyi*c_ij(1,2)*DBf_iA[1][0] + Gzi*c_ij(2,2)*DBf_iA[2][0] + (Gyi*c_ij(0,2) + Gxi*c_ij(1,2))*DBf_iA[3][0] + (Gzi*c_ij(1,2) + Gyi*c_ij(2,2))*DBf_iA[4][0] + (Gzi*c_ij(0,2) + Gxi*c_ij(2,2))*DBf_iA[5][0]);
+				ke[i3  ][j3  ] += -2.*det_f_Ai*detJ0_element*(Gxi*c_ij(0,0)*DBf_iA[0][0] + Gyi*c_ij(1,0)*DBf_iA[1][0] + Gzi*c_ij(2,0)*DBf_iA[2][0] + (Gyi*c_ij(0,0) + Gxi*c_ij(1,0))*DBf_iA[3][0] + (Gzi*c_ij(1,0) + Gyi*c_ij(2,0))*DBf_iA[4][0] + (Gzi*c_ij(0,0) + Gxi*c_ij(2,0))*DBf_iA[5][0]);
+				ke[i3+1][j3  ] += -2.*det_f_Ai*detJ0_element*(Gxi*c_ij(0,1)*DBf_iA[0][0] + Gyi*c_ij(1,1)*DBf_iA[1][0] + Gzi*c_ij(2,1)*DBf_iA[2][0] + (Gyi*c_ij(0,1) + Gxi*c_ij(1,1))*DBf_iA[3][0] + (Gzi*c_ij(1,1) + Gyi*c_ij(2,1))*DBf_iA[4][0] + (Gzi*c_ij(0,1) + Gxi*c_ij(2,1))*DBf_iA[5][0]);
+				ke[i3+2][j3  ] += -2.*det_f_Ai*detJ0_element*(Gxi*c_ij(0,2)*DBf_iA[0][0] + Gyi*c_ij(1,2)*DBf_iA[1][0] + Gzi*c_ij(2,2)*DBf_iA[2][0] + (Gyi*c_ij(0,2) + Gxi*c_ij(1,2))*DBf_iA[3][0] + (Gzi*c_ij(1,2) + Gyi*c_ij(2,2))*DBf_iA[4][0] + (Gzi*c_ij(0,2) + Gxi*c_ij(2,2))*DBf_iA[5][0]);
 				// -------
-				ke[i3  ][j3+1] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,0)*DBf_iA[0][1] + Gyi*c_ij(1,0)*DBf_iA[1][1] + Gzi*c_ij(2,0)*DBf_iA[2][1] + (Gyi*c_ij(0,0) + Gxi*c_ij(1,0))*DBf_iA[3][1] + (Gzi*c_ij(1,0) + Gyi*c_ij(2,0))*DBf_iA[4][1] + (Gzi*c_ij(0,0) + Gxi*c_ij(2,0))*DBf_iA[5][1]);
-				ke[i3+1][j3+1] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,1)*DBf_iA[0][1] + Gyi*c_ij(1,1)*DBf_iA[1][1] + Gzi*c_ij(2,1)*DBf_iA[2][1] + (Gyi*c_ij(0,1) + Gxi*c_ij(1,1))*DBf_iA[3][1] + (Gzi*c_ij(1,1) + Gyi*c_ij(2,1))*DBf_iA[4][1] + (Gzi*c_ij(0,1) + Gxi*c_ij(2,1))*DBf_iA[5][1]);
-				ke[i3+2][j3+1] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,2)*DBf_iA[0][1] + Gyi*c_ij(1,2)*DBf_iA[1][1] + Gzi*c_ij(2,2)*DBf_iA[2][1] + (Gyi*c_ij(0,2) + Gxi*c_ij(1,2))*DBf_iA[3][1] + (Gzi*c_ij(1,2) + Gyi*c_ij(2,2))*DBf_iA[4][1] + (Gzi*c_ij(0,2) + Gxi*c_ij(2,2))*DBf_iA[5][1]);
+				ke[i3  ][j3+1] += -2.*det_f_Ai*detJ0_element*(Gxi*c_ij(0,0)*DBf_iA[0][1] + Gyi*c_ij(1,0)*DBf_iA[1][1] + Gzi*c_ij(2,0)*DBf_iA[2][1] + (Gyi*c_ij(0,0) + Gxi*c_ij(1,0))*DBf_iA[3][1] + (Gzi*c_ij(1,0) + Gyi*c_ij(2,0))*DBf_iA[4][1] + (Gzi*c_ij(0,0) + Gxi*c_ij(2,0))*DBf_iA[5][1]);
+				ke[i3+1][j3+1] += -2.*det_f_Ai*detJ0_element*(Gxi*c_ij(0,1)*DBf_iA[0][1] + Gyi*c_ij(1,1)*DBf_iA[1][1] + Gzi*c_ij(2,1)*DBf_iA[2][1] + (Gyi*c_ij(0,1) + Gxi*c_ij(1,1))*DBf_iA[3][1] + (Gzi*c_ij(1,1) + Gyi*c_ij(2,1))*DBf_iA[4][1] + (Gzi*c_ij(0,1) + Gxi*c_ij(2,1))*DBf_iA[5][1]);
+				ke[i3+2][j3+1] += -2.*det_f_Ai*detJ0_element*(Gxi*c_ij(0,2)*DBf_iA[0][1] + Gyi*c_ij(1,2)*DBf_iA[1][1] + Gzi*c_ij(2,2)*DBf_iA[2][1] + (Gyi*c_ij(0,2) + Gxi*c_ij(1,2))*DBf_iA[3][1] + (Gzi*c_ij(1,2) + Gyi*c_ij(2,2))*DBf_iA[4][1] + (Gzi*c_ij(0,2) + Gxi*c_ij(2,2))*DBf_iA[5][1]);
 				// -------
-				ke[i3  ][j3+2] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,0)*DBf_iA[0][2] + Gyi*c_ij(1,0)*DBf_iA[1][2] + Gzi*c_ij(2,0)*DBf_iA[2][2] + (Gyi*c_ij(0,0) + Gxi*c_ij(1,0))*DBf_iA[3][2] + (Gzi*c_ij(1,0) + Gyi*c_ij(2,0))*DBf_iA[4][2] + (Gzi*c_ij(0,0) + Gxi*c_ij(2,0))*DBf_iA[5][2]);
-				ke[i3+1][j3+2] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,1)*DBf_iA[0][2] + Gyi*c_ij(1,1)*DBf_iA[1][2] + Gzi*c_ij(2,1)*DBf_iA[2][2] + (Gyi*c_ij(0,1) + Gxi*c_ij(1,1))*DBf_iA[3][2] + (Gzi*c_ij(1,1) + Gyi*c_ij(2,1))*DBf_iA[4][2] + (Gzi*c_ij(0,1) + Gxi*c_ij(2,1))*DBf_iA[5][2]);
-				ke[i3+2][j3+2] += -2*det_f_Ai*detJ0_element*(Gxi*c_ij(0,2)*DBf_iA[0][2] + Gyi*c_ij(1,2)*DBf_iA[1][2] + Gzi*c_ij(2,2)*DBf_iA[2][2] + (Gyi*c_ij(0,2) + Gxi*c_ij(1,2))*DBf_iA[3][2] + (Gzi*c_ij(1,2) + Gyi*c_ij(2,2))*DBf_iA[4][2] + (Gzi*c_ij(0,2) + Gxi*c_ij(2,2))*DBf_iA[5][2]);
+				ke[i3  ][j3+2] += -2.*det_f_Ai*detJ0_element*(Gxi*c_ij(0,0)*DBf_iA[0][2] + Gyi*c_ij(1,0)*DBf_iA[1][2] + Gzi*c_ij(2,0)*DBf_iA[2][2] + (Gyi*c_ij(0,0) + Gxi*c_ij(1,0))*DBf_iA[3][2] + (Gzi*c_ij(1,0) + Gyi*c_ij(2,0))*DBf_iA[4][2] + (Gzi*c_ij(0,0) + Gxi*c_ij(2,0))*DBf_iA[5][2]);
+				ke[i3+1][j3+2] += -2.*det_f_Ai*detJ0_element*(Gxi*c_ij(0,1)*DBf_iA[0][2] + Gyi*c_ij(1,1)*DBf_iA[1][2] + Gzi*c_ij(2,1)*DBf_iA[2][2] + (Gyi*c_ij(0,1) + Gxi*c_ij(1,1))*DBf_iA[3][2] + (Gzi*c_ij(1,1) + Gyi*c_ij(2,1))*DBf_iA[4][2] + (Gzi*c_ij(0,1) + Gxi*c_ij(2,1))*DBf_iA[5][2]);
+				ke[i3+2][j3+2] += -2.*det_f_Ai*detJ0_element*(Gxi*c_ij(0,2)*DBf_iA[0][2] + Gyi*c_ij(1,2)*DBf_iA[1][2] + Gzi*c_ij(2,2)*DBf_iA[2][2] + (Gyi*c_ij(0,2) + Gxi*c_ij(1,2))*DBf_iA[3][2] + (Gzi*c_ij(1,2) + Gyi*c_ij(2,2))*DBf_iA[4][2] + (Gzi*c_ij(0,2) + Gxi*c_ij(2,2))*DBf_iA[5][2]);
 
 				// **MCLS** calculate (dN/dx_i)*c_ij*D_jklm*B_l*(f_Am)^T matrices. Also multiply by the constants -2*det_f_Ai*detJ0_element
-				ke[i3  ][j3  ] += -2*det_f_Ai*detJ0_element*(dNdxi_cij[0]*DBf_iA[0][0] + dNdxi_cij[1]*DBf_iA[3][0] + dNdxi_cij[2]*DBf_iA[5][0]);
-				ke[i3+1][j3  ] += -2*det_f_Ai*detJ0_element*(dNdxi_cij[1]*DBf_iA[1][0] + dNdxi_cij[0]*DBf_iA[3][0] + dNdxi_cij[2]*DBf_iA[4][0]);
-				ke[i3+2][j3  ] += -2*det_f_Ai*detJ0_element*(dNdxi_cij[2]*DBf_iA[2][0] + dNdxi_cij[1]*DBf_iA[4][0] + dNdxi_cij[0]*DBf_iA[5][0]);
+				ke[i3  ][j3  ] += -2.*det_f_Ai*detJ0_element*(dNdxi_cij[0]*DBf_iA[0][0] + dNdxi_cij[1]*DBf_iA[3][0] + dNdxi_cij[2]*DBf_iA[5][0]);
+				ke[i3+1][j3  ] += -2.*det_f_Ai*detJ0_element*(dNdxi_cij[1]*DBf_iA[1][0] + dNdxi_cij[0]*DBf_iA[3][0] + dNdxi_cij[2]*DBf_iA[4][0]);
+				ke[i3+2][j3  ] += -2.*det_f_Ai*detJ0_element*(dNdxi_cij[2]*DBf_iA[2][0] + dNdxi_cij[1]*DBf_iA[4][0] + dNdxi_cij[0]*DBf_iA[5][0]);
 				// -------
-				ke[i3  ][j3+1] += -2*det_f_Ai*detJ0_element*(dNdxi_cij[0]*DBf_iA[0][1] + dNdxi_cij[1]*DBf_iA[3][1] + dNdxi_cij[2]*DBf_iA[5][1]);
-				ke[i3+1][j3+1] += -2*det_f_Ai*detJ0_element*(dNdxi_cij[1]*DBf_iA[1][1] + dNdxi_cij[0]*DBf_iA[3][1] + dNdxi_cij[2]*DBf_iA[4][1]);
-				ke[i3+2][j3+1] += -2*det_f_Ai*detJ0_element*(dNdxi_cij[2]*DBf_iA[2][1] + dNdxi_cij[1]*DBf_iA[4][1] + dNdxi_cij[0]*DBf_iA[5][1]);
+				ke[i3  ][j3+1] += -2.*det_f_Ai*detJ0_element*(dNdxi_cij[0]*DBf_iA[0][1] + dNdxi_cij[1]*DBf_iA[3][1] + dNdxi_cij[2]*DBf_iA[5][1]);
+				ke[i3+1][j3+1] += -2.*det_f_Ai*detJ0_element*(dNdxi_cij[1]*DBf_iA[1][1] + dNdxi_cij[0]*DBf_iA[3][1] + dNdxi_cij[2]*DBf_iA[4][1]);
+				ke[i3+2][j3+1] += -2.*det_f_Ai*detJ0_element*(dNdxi_cij[2]*DBf_iA[2][1] + dNdxi_cij[1]*DBf_iA[4][1] + dNdxi_cij[0]*DBf_iA[5][1]);
+				// -------
+				ke[i3  ][j3+2] += -2.*det_f_Ai*detJ0_element*(dNdxi_cij[0]*DBf_iA[0][2] + dNdxi_cij[1]*DBf_iA[3][2] + dNdxi_cij[2]*DBf_iA[5][2]);
+				ke[i3+1][j3+2] += -2.*det_f_Ai*detJ0_element*(dNdxi_cij[1]*DBf_iA[1][2] + dNdxi_cij[0]*DBf_iA[3][2] + dNdxi_cij[2]*DBf_iA[4][2]);
+				ke[i3+2][j3+2] += -2.*det_f_Ai*detJ0_element*(dNdxi_cij[2]*DBf_iA[2][2] + dNdxi_cij[1]*DBf_iA[4][2] + dNdxi_cij[0]*DBf_iA[5][2]);
 
 				// **MCLS** calculate c_jk*D_jklm*B_l*(f_Am)^T Note that this is a vector.
 				ke_dev[0]  = c_ij(0,0)*DBf_iA[0][0] + c_ij(1,0)*DBf_iA[3][0] + c_ij(2,0)*DBf_iA[5][0];
@@ -662,7 +687,6 @@ void FE3FieldElasticSolidDomain::ElementMaterialStiffness(int iel, matrix &ke)
 				ke[i3+1][j3+2] += det_f_Ai*detJ0_element*(2./3.)*Gyi*ke_dev[2];
 				ke[i3+2][j3+2] += det_f_Ai*detJ0_element*(2./3.)*Gzi*ke_dev[2];
 
-				// Finally, multiply by the constants -2*det_f_Ai and detJ0_element to complete the expression.
 			}
 		}
 	}
@@ -920,17 +944,20 @@ void FE3FieldElasticSolidDomain::UpdateElementStress(int iel, const FETimeInfo& 
 	}
 
 	// calculate the average dilatation and pressure
-	double v = 0, vt = 0, V = 0;
+	// **MCLS** Due to the deformed configuration being known, the functions to calculate volume needed to be adjusted from the traditional formulation.
+	double v_alphaReferenceConfig = 0; // The volume of the element in the reference configuration, calculated using alpha.
+	double v_referenceConfig = 0; // The volume of the element in the reference configuration
+	double v_deformedConfig = 0; // The volume of the element in the deformed configuration.
 	for (int n=0; n<nint; ++n)
 	{
-		v += detJt(el, n, m_alphaf)*gw[n];
-        vt+= detJt(el, n)*gw[n];
-		V += detJ0(el, n)*gw[n];
+		v_alphaReferenceConfig += detJt(el, n, m_alphaf)*gw[n]; // **MCLS** detJt uses the "current" nodal coordinates, which for the inverse problem means the node coordinates in the reference configuration.
+        v_referenceConfig += detJt(el, n)*gw[n]; // **MCLS** detJt uses the "current" nodal coordinates, which for the inverse problem means the node coordinates in the reference configuration.
+		v_deformedConfig += detJ0(el, n)*gw[n]; // **MCLS** detJ0 uses the given node positions, which for the inverse problem are taken to be defined in the deformed configuration. Therefore, this is the desired value defined wrt the deformed configuration.
 	}
 
 	// calculate volume ratio
-	ed.eJ = v / V;
-    ed.eJt = vt / V;
+	ed.eJ = v_deformedConfig / v_alphaReferenceConfig; // To avoid confusion between uppercase and lowercase "j" variables, this is the traditional jacobian, i.e. analogous to J = det(F_iA), where F_iA is the deformation gradient.
+    ed.eJt = v_deformedConfig / v_referenceConfig; // To avoid confusion between uppercase and lowercase "j" variables, this is the traditional jacobian, i.e. analogous to J = det(F_iA), where F_iA is the deformation gradient.
     double eUt = mat.U(ed.eJt);
     double eUp = mat.U(ed.eJp);
 
