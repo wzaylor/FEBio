@@ -50,7 +50,11 @@ END_FECORE_CLASS();
 //-----------------------------------------------------------------------------
 FESolver::FESolver(FEModel* fem) : FECoreBase(fem)
 { 
-	m_msymm = REAL_SYMMETRIC; // assume symmetric stiffness matrix
+	// m_msymm = REAL_SYMMETRIC; // assume symmetric stiffness matrix
+	
+	// **MCLS** The stiffness matrix is non-symmetric.
+	// TODO:: This should be defined somewhere better.
+	m_msymm = REAL_UNSYMMETRIC; // **MCLS** assume non-symmetric stiffness matrix
 	m_niter = 0;
 
 	m_nref = 0;

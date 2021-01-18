@@ -135,7 +135,7 @@ void FE3FieldElasticSolidDomain::StiffnessMatrix(FELinearSystem& LS)
 
 	// repeat over all solid elements
 	int NE = (int)m_Elem.size();
-	#pragma omp parallel for
+	// #pragma omp parallel for
 	for (int iel=0; iel<NE; ++iel)
 	{
 		FESolidElement& el = m_Elem[iel];
@@ -160,12 +160,21 @@ void FE3FieldElasticSolidDomain::StiffnessMatrix(FELinearSystem& LS)
 		// **MCLS** The "strain" matrix
 		ElementStrainStiffness(iel, ke);
 
+		double x[24][24] = {0};
+		for (int i = 0; i<24; ++i)
+		{
+			for (int j = 0; j<24; ++j)
+			{
+				x[i][j] = ke[i][j];
+			}
+		}
+
 		// assign symmetic parts
 		// TODO: Can this be omitted by changing the Assemble routine so that it only
 		// grabs elements from the upper diagonal matrix?
-		for (int i=0; i<ndof; ++i)
-			for (int j=i+1; j<ndof; ++j)
-				ke[j][i] = ke[i][j];
+		// for (int i=0; i<ndof; ++i)
+		// 	for (int j=i+1; j<ndof; ++j)
+		// 		ke[j][i] = ke[i][j];
 
 		// get the element's LM vector
 		vector<int> lm;
@@ -574,7 +583,8 @@ void FE3FieldElasticSolidDomain::ElementMaterialStiffness(int iel, matrix &ke)
 		// Note that we are only grabbing the deviatoric tangent. 
 		// The other tangent terms depend on the pressure p
 		// which we seperately
-		tens4ds C = Cp*ed.ep + mat.DevTangent(mp);
+		// tens4ds C = Cp*ed.ep + mat.DevTangent(mp);
+		tens4ds C = mat.DevTangent(mp);
 
 		// get the 'D' matrix
 		C.extract(D);
@@ -663,18 +673,18 @@ void FE3FieldElasticSolidDomain::ElementMaterialStiffness(int iel, matrix &ke)
 				ke[i3+1][j3+2] += -2.*det_f_Ai*detJ0_element*(dNdxi_cij[1]*DBf_iA[1][2] + dNdxi_cij[0]*DBf_iA[3][2] + dNdxi_cij[2]*DBf_iA[4][2]);
 				ke[i3+2][j3+2] += -2.*det_f_Ai*detJ0_element*(dNdxi_cij[2]*DBf_iA[2][2] + dNdxi_cij[1]*DBf_iA[4][2] + dNdxi_cij[0]*DBf_iA[5][2]);
 
-				// **MCLS** calculate c_jk*D_jklm*B_l*(f_Am)^T Note that this is a vector.
-				ke_dev[0]  = c_ij(0,0)*DBf_iA[0][0] + c_ij(1,0)*DBf_iA[3][0] + c_ij(2,0)*DBf_iA[5][0];
-				ke_dev[0] += c_ij(1,1)*DBf_iA[1][0] + c_ij(0,1)*DBf_iA[3][0] + c_ij(2,1)*DBf_iA[4][0];
-				ke_dev[0] += c_ij(2,2)*DBf_iA[2][0] + c_ij(1,1)*DBf_iA[4][0] + c_ij(0,2)*DBf_iA[5][0];
+				// **MCLS** calculate 2.*c_jk*D_jklm*B_l*(f_Am)^T Note that this is a vector.
+				ke_dev[0]  = 2.*(c_ij(0,0)*DBf_iA[0][0] + c_ij(1,0)*DBf_iA[3][0] + c_ij(2,0)*DBf_iA[5][0]);
+				ke_dev[0] += 2.*(c_ij(1,1)*DBf_iA[1][0] + c_ij(0,1)*DBf_iA[3][0] + c_ij(2,1)*DBf_iA[4][0]);
+				ke_dev[0] += 2.*(c_ij(2,2)*DBf_iA[2][0] + c_ij(1,2)*DBf_iA[4][0] + c_ij(0,2)*DBf_iA[5][0]);
 				// -------
-				ke_dev[1]  = c_ij(0,0)*DBf_iA[0][1] + c_ij(1,0)*DBf_iA[3][1] + c_ij(2,0)*DBf_iA[5][1];
-				ke_dev[1] += c_ij(1,1)*DBf_iA[1][1] + c_ij(0,1)*DBf_iA[3][1] + c_ij(2,1)*DBf_iA[4][1];
-				ke_dev[1] += c_ij(2,2)*DBf_iA[2][1] + c_ij(1,1)*DBf_iA[4][1] + c_ij(0,2)*DBf_iA[5][1];
+				ke_dev[1]  = 2.*(c_ij(0,0)*DBf_iA[0][1] + c_ij(1,0)*DBf_iA[3][1] + c_ij(2,0)*DBf_iA[5][1]);
+				ke_dev[1] += 2.*(c_ij(1,1)*DBf_iA[1][1] + c_ij(0,1)*DBf_iA[3][1] + c_ij(2,1)*DBf_iA[4][1]);
+				ke_dev[1] += 2.*(c_ij(2,2)*DBf_iA[2][1] + c_ij(1,2)*DBf_iA[4][1] + c_ij(0,2)*DBf_iA[5][1]);
 				// -------
-				ke_dev[2]  = c_ij(0,0)*DBf_iA[0][2] + c_ij(1,0)*DBf_iA[3][2] + c_ij(2,0)*DBf_iA[5][2];
-				ke_dev[2] += c_ij(1,1)*DBf_iA[1][2] + c_ij(0,1)*DBf_iA[3][2] + c_ij(2,1)*DBf_iA[4][2];
-				ke_dev[2] += c_ij(2,2)*DBf_iA[2][2] + c_ij(1,1)*DBf_iA[4][2] + c_ij(0,2)*DBf_iA[5][2];
+				ke_dev[2]  = 2.*(c_ij(0,0)*DBf_iA[0][2] + c_ij(1,0)*DBf_iA[3][2] + c_ij(2,0)*DBf_iA[5][2]);
+				ke_dev[2] += 2.*(c_ij(1,1)*DBf_iA[1][2] + c_ij(0,1)*DBf_iA[3][2] + c_ij(2,1)*DBf_iA[4][2]);
+				ke_dev[2] += 2.*(c_ij(2,2)*DBf_iA[2][2] + c_ij(1,2)*DBf_iA[4][2] + c_ij(0,2)*DBf_iA[5][2]);
 
 				// **MCLS** Using ke_dev, calculate -(1/3)*I_mn*(dN/dx_m)*c_jk*D_jklm*B_l*(f_Am)^T This can also be written as -(1/3)*I_mn*(dN/dx_m)*(ke_dev)_A
 				// Also multiply by the constants -2*det_f_Ai*detJ0_element
@@ -867,11 +877,11 @@ void FE3FieldElasticSolidDomain::ElementGeometricalStiffness(int iel, matrix &ke
 				ke[i3  ][j3  ] += term1[0]*term2[0]*detJ0_element;
 				ke[i3  ][j3+1] += term1[0]*term2[1]*detJ0_element;
 				ke[i3  ][j3+2] += term1[0]*term2[2]*detJ0_element;
-
+				// -------
 				ke[i3+1][j3  ] += term1[1]*term2[0]*detJ0_element;
 				ke[i3+1][j3+1] += term1[1]*term2[1]*detJ0_element;
 				ke[i3+1][j3+2] += term1[1]*term2[2]*detJ0_element;
-
+				// -------
 				ke[i3+2][j3  ] += term1[2]*term2[0]*detJ0_element;
 				ke[i3+2][j3+1] += term1[2]*term2[1]*detJ0_element;
 				ke[i3+2][j3+2] += term1[2]*term2[2]*detJ0_element;
@@ -912,19 +922,25 @@ void FE3FieldElasticSolidDomain::ElementStrainStiffness(int iel, matrix &ke)
 	// **MCLS** The left Cauchy-Green and Finger deformation tensors.
 	mat3ds b_ij; // The left Cauchy-Green deformation tensor b^ij
 
-	// **MCLS** The Cauchy stress tensor
-	mat3ds s_ij;
-
 	// The determinant of the inverse deformation gradient (j=1/J)
 	double det_f_Ai;
 
 	// Terms used to break up the calculation in to smaller parts -------------------
 	// -------------------------------------------------------------------------------
-	// **MCLS** a_ij = b^ia g_ab s_bj
+	// **MCLS** a_ij = b^ia g_ab s^bj
 	mat3d bs_ij;
 
-	// **MCLS** 
-	mat3d term1;
+	// **MCLS** a_ij = f_Ai b^im g_mn s^nj
+	mat3d fbs_Aj;
+
+	// mat3d term1;
+	// mat3d term2;
+	mat3d term3;
+	mat3d term4;
+	mat3d term5;
+	mat3d sumTerms;
+
+	FEElementMatrix keTemp(el); // Temporarily used for debugging
 
 	// -------------------------------------------------------------------------------
 
@@ -955,9 +971,14 @@ void FE3FieldElasticSolidDomain::ElementStrainStiffness(int iel, matrix &ke)
 		// **MCLS** define the Finger deformation tensor.
 		b_ij = pt.LeftCauchyGreenMCLS();
 
+		// **MCLS** Populate the Cauchy stress tensor, s_ij
+		mat3ds& s_ij = pt.m_s; 
+
 		// **MCLS** Populate bs_ij
 		bs_ij = b_ij*s_ij;
-		mat3d x = f_Ai*bs_ij;
+		fbs_Aj = f_Ai*bs_ij;
+		// term1 = bs_ij*f_Ai.transpose(); // Note that this is the transpose of f_Ai*bs_ij
+
 
 		// **MCLS** ke is not symmetric
 		for (int i=0, i3=0; i<neln; ++i, i3 += 3)
@@ -966,6 +987,10 @@ void FE3FieldElasticSolidDomain::ElementStrainStiffness(int iel, matrix &ke)
 			Gyi = G[i].y;
 			Gzi = G[i].z;
 
+			vec3d term2i = f_Ai*G[i];
+			vec3d term3i = fbs_Aj*G[i];
+			vec3d term4i = bs_ij*G[i];
+
 			// **MCLS** ke is not symmetric, so j is iterated from 0 to neln
 			for (int j=0, j3 = 0; j<neln; ++j, j3 += 3)
 			{
@@ -973,10 +998,33 @@ void FE3FieldElasticSolidDomain::ElementStrainStiffness(int iel, matrix &ke)
 				Gyj = G[j].y;
 				Gzj = G[j].z;
 
-				term1 = f_Ai*bs_ij;
-				// ke[i3  ][j3  ] += 0.5*(Gxi*Gxj + Gyi*Gyj + Gzi*Gzj)*(f_Ai(0,0)*bs_ij(0,0) + f_Ai(0,1)*bs_ij(1,0));
-				// ke[i3  ][j3+1] += 3;
-				// ke[i3  ][j3+2] += 3;
+				vec3d term2j = bs_ij.transpose()*G[j];
+				vec3d term3j = fbs_Aj*G[j];
+				double term4ij = term4i.x*Gxj + term4i.y*Gyj + term4i.z*Gzj;
+				vec3d term5j = fbs_Aj*G[j];
+
+				// -------
+				mat3d term1 = fbs_Aj.transpose()*0.5*(Gxi*Gxj + Gyi*Gyj + Gzi*Gzj);
+				term1 *= detJ0_element;
+				// -------
+				mat3d term2 = term2j&term2i; // The tensor product of term2j and term2i
+				term2 *= 0.5*detJ0_element;
+				// -------
+				term3 = G[j]&term3i;
+				term3 *= 0.5*detJ0_element;
+				// -------
+				term4 = f_Ai.transpose()*term4ij;
+				term4 *= 0.5*detJ0_element;
+				// -------
+				term5 = G[i]&term5j;
+				term5 *= (-2./3.)*detJ0_element;
+				// -------
+				// Sum the terms and populate the appropriate positions on the ke matrix.
+				sumTerms = term1 + term2 + term3 + term4 + term5;
+				ke[i3  ][j3  ] += sumTerms(0,0); ke[i3  ][j3+1] += sumTerms(0,1); ke[i3  ][j3+2] += sumTerms(0,2);
+				ke[i3+1][j3  ] += sumTerms(1,0); ke[i3+1][j3+1] += sumTerms(1,1); ke[i3+1][j3+2] += sumTerms(1,2);
+				ke[i3+2][j3  ] += sumTerms(2,0); ke[i3+2][j3+1] += sumTerms(2,1); ke[i3+2][j3+2] += sumTerms(2,2);
+
 			}
 		}
 	}
