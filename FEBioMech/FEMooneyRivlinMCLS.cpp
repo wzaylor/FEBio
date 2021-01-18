@@ -114,11 +114,11 @@ tens4ds FEMooneyRivlinMCLS::DevTangent(FEMaterialPoint& mp)
 	tens4ds stiffnessMatrix;
 
 	// The fourth order tensors used to calculate the material stiffness matrix
-	tens4ds bXb = 0.5*dyad1s(b_ij); // The tensor product a^ijkl = b^ij*b^kl
+	tens4ds bXb = dyad1s(b_ij); // The tensor product a^ijkl = b^ij*b^kl
 	tens4ds b_ikjl = dyad4s(b_ij); // 0.5*(b^ik*b^jl + b^il*b^jk)
 	tens4ds b2b_ijlk = dyad4s(b_ij_squared, b_ij); // 0.5{[b^ma b^ib + b^mb b^ia] b^jn g_mn + b^mi[b^ja b^nb + b^jb b^na]}
 	tens4ds b2Xb_ijkl = dyad1s(b_ij_squared, b_ij); // a^ijab = b^ab (b^im g_mn b^nj) + b^ij (b^am g_mn b^nb)
-	tens4ds b2Xb2_ijkl = 0.5*dyad1s(b_ij_squared); // The tensor product a^ijkl = b^im g_mn b^nj b^kr g_rs b^sl
+	tens4ds b2Xb2_ijkl = dyad1s(b_ij_squared); // The tensor product a^ijkl = b^im g_mn b^nj b^kr g_rs b^sl
 	tens4ds b3Xb_ijkl = dyad1s(b_ij_cubed, b_ij); // The sum of tensor products a^ijkl = (b^3)^ij b^kl + b^ij (b^3)^kl
 	tens4ds b3b_ijkl = dyad4s(b_ij_cubed, b_ij); // a^ijab = 0.5{[b^ra b^ib + b^rb b^ia]b^js g_sm b^mn g_rn + [b^ja b^sb + b^jb b^sa]b^ri g_sm b^mn g_rn}
 	tens4ds b2_ijkl = dyad4s(b_ij_squared); // a^ijkl = 0.5 b^ri b^js g_sm [b^mk b^nl + b^ml b^nk]
@@ -127,14 +127,14 @@ tens4ds FEMooneyRivlinMCLS::DevTangent(FEMaterialPoint& mp)
 	tens4ds c2Term; // The terms that are multiplied by c1 in the material stiffness matrix
 
 	c1Term = -(1./3.)*b2Xb_ijkl;
-	c1Term += (1./9.)*b_ij.tr()*bXb; // Recall that bXb is multiplied by 0.5 when it is defined above.
+	c1Term += (1./9.)*b_ij.tr()*bXb; // Note that bXb already has the 0.5 incorporated.
 	c1Term += b2b_ijlk;
 	c1Term += -(1./3.)*b_ij.tr()*b_ikjl;
 
 	c2Term = (2./3.)*b3Xb_ijkl;
-	c2Term += -(2./9.)*b_ij_squared.tr()*bXb; // Recall that bXb is multiplied by 0.5 when it is defined above.
+	c2Term += -(2./9.)*b_ij_squared.tr()*bXb; // Note that bXb already has the 0.5 incorporated.
 	c2Term += -(2./3.)*b_ij.tr()*b2Xb_ijkl;
-	c2Term += (2./9.)*b_ij.tr()*b_ij.tr()*bXb; // Recall that bXb is multiplied by 0.5 when it is defined above.
+	c2Term += (2./9.)*b_ij.tr()*b_ij.tr()*bXb; // Note that bXb already has the 0.5 incorporated.
 
 	c2Term += -b3b_ijkl;
 	c2Term += -b2_ijkl;
@@ -142,7 +142,7 @@ tens4ds FEMooneyRivlinMCLS::DevTangent(FEMaterialPoint& mp)
 	c2Term += (1./3.)*b_ij_squared.tr()*b_ikjl;
 
 	c2Term += b_ij.tr()*b2b_ijlk;
-	c2Term += b2Xb2_ijkl; // Recall that b2Xb2_ijkl is multiplied by 0.5 when it is defined above.
+	c2Term += b2Xb2_ijkl; // Note that b2Xb2_ijkl already has the 0.5 incorporated.is multiplied by 0.5 when it is defined above.
 
 	c2Term += -(1./3.)*b_ij.tr()*b_ij.tr()*b_ikjl;
 
