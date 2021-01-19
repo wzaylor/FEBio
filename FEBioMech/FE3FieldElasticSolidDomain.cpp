@@ -135,7 +135,7 @@ void FE3FieldElasticSolidDomain::StiffnessMatrix(FELinearSystem& LS)
 
 	// repeat over all solid elements
 	int NE = (int)m_Elem.size();
-	// #pragma omp parallel for
+	#pragma omp parallel for
 	for (int iel=0; iel<NE; ++iel)
 	{
 		FESolidElement& el = m_Elem[iel];
