@@ -1134,14 +1134,18 @@ void FE3FieldElasticSolidDomain::UpdateElementStress(int iel, const FETimeInfo& 
 		pt.m_rt = el.Evaluate(r, n);
 
 		// get the deformation gradient and determinant
-        double Jt, Jp;
-        mat3d Ft, Fp;
-        Jt = defgrad(el, Ft, n);
-        Jp = defgradp(el, Fp, n);
-        pt.m_F = Ft*m_alphaf + Fp*(1-m_alphaf);
-        pt.m_J = pt.m_F.det();
-        mat3d Fi = pt.m_F.inverse();
-        pt.m_L = (Ft - Fp)*Fi/dt;
+        double det_f_Ai, det_f_Ai_previous;
+        mat3d f_Ai, f_Ai_previous;
+		// **MCLS** Define the inverse deformation gradient (f_Ai).
+		// Note that the code doesn't need to calculate the inverse.
+		// The inverse deformation gradient is calculated using the original code.
+		// The inverse gradient is calculated because we are taking the original known node positions to be in the deformed configuration, and taking the displacements to be defining the node positions in the reference configuration.
+        det_f_Ai = defgrad(el, f_Ai, n);
+        det_f_Ai_previous = defgradp(el, f_Ai_previous, n);
+        pt.m_F = f_Ai*m_alphaf + f_Ai_previous*(1-m_alphaf); // **MCLS** This is the inverse deformation gradient. To avoid breaking other parts of the code, the variable name m_F wasn't changed.
+        pt.m_J = pt.m_F.det(); // **MCLS** This is the jacobian of the inverse deformation gradient. To avoid breaking other parts of the code, the variable name m_J wasn't changed.
+        mat3d F_Ai = pt.m_F.inverse(); // **MCLS** The deformation gradient
+        pt.m_L = (f_Ai - f_Ai_previous)*F_Ai/dt;
         pt.m_v = el.Evaluate(vel, n);
         pt.m_a = el.Evaluate(acc, n);
 
@@ -1151,9 +1155,9 @@ void FE3FieldElasticSolidDomain::UpdateElementStress(int iel, const FETimeInfo& 
 		et.m_index = mp.m_index;
 		et.m_r0 = pt.m_r0;
 		et.m_rt = pt.m_rt;
-        et.m_F = Ft; et.m_J = Jt;
+        et.m_F = f_Ai; et.m_J = det_f_Ai;
         double Wt = mat.DevStrainEnergyDensity(et);
-        et.m_F = Fp; et.m_J = Jp;
+        et.m_F = f_Ai_previous; et.m_J = det_f_Ai_previous;
         double Wp = mat.DevStrainEnergyDensity(et);
         
         // store total strain energy density at current time

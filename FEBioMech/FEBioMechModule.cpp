@@ -91,6 +91,7 @@ SOFTWARE.*/
 #include "FETCNonlinearOrthotropic.h"
 #include "FETendonMaterial.h"
 #include "FETransIsoMooneyRivlin.h"
+#include "FETransIsoMooneyRivlinMCLS.h"
 #include "FETransIsoVerondaWestmann.h"
 #include "FETrussMaterial.h"
 #include "FEUncoupledActiveContraction.h"
@@ -131,6 +132,7 @@ SOFTWARE.*/
 #include "FEDamageCriterion.h"
 #include "FEFiberExpLinear.h"
 #include "FEUncoupledFiberExpLinear.h"
+#include "FEUncoupledFiberExpLinearMCLS.h"
 #include "FEPrescribedActiveContractionUniaxial.h"
 #include "FEPrescribedActiveContractionUniaxialUC.h"
 #include "FEPrescribedActiveContractionTransIso.h"
@@ -337,6 +339,7 @@ void FEBioMech::InitModule()
 	REGISTER_FECORE_CLASS(FETCNonlinearOrthotropic, "TC nonlinear orthotropic");
 	REGISTER_FECORE_CLASS(FETendonMaterial, "tendon material");
 	REGISTER_FECORE_CLASS(FETransIsoMooneyRivlin, "trans iso Mooney-Rivlin");
+	REGISTER_FECORE_CLASS(FETransIsoMooneyRivlinMCLS, "trans iso Mooney-RivlinMCLS");
 	REGISTER_FECORE_CLASS(FETransIsoVerondaWestmann, "trans iso Veronda-Westmann");
 	REGISTER_FECORE_CLASS(FEUncoupledElasticMixture, "uncoupled solid mixture");
 	REGISTER_FECORE_CLASS(FEVerondaWestmann, "Veronda-Westmann");
@@ -363,6 +366,7 @@ void FEBioMech::InitModule()
 	REGISTER_FECORE_CLASS(FEFiberPowerLinear, "fiber-power-linear");
 	REGISTER_FECORE_CLASS(FEFiberExpLinear, "fiber-exp-linear");
 	REGISTER_FECORE_CLASS(FEUncoupledFiberExpLinear, "uncoupled fiber-exp-linear");
+	REGISTER_FECORE_CLASS(FEUncoupledFiberExpLinearMCLS, "uncoupled fiber-exp-linearMCLS");
 
 	// solid materials (derived from FESolidMaterial)
 	REGISTER_FECORE_CLASS(FERigidMaterial, "rigid body");
