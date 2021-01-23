@@ -78,33 +78,34 @@ mat3ds FEUncoupledFiberExpLinearMCLS::DevFiberStress(FEMaterialPoint &mp, const 
 	// double I4 = lamd*lamd;
 
 	// strain energy derivative
-	double dWdI4 = 0;
+	double dfdl = 0;
 	if (lambda_tilde >= 1)
 	{
 		double lambda_i = 1.0 / lambda_tilde;
 		// double Wl;
 		if (lambda < m_lam1)
 		{
-			dWdI4 = 0.5*lambda_i*lambda_i*m_c3*(exp(m_c4*(lambda_tilde - 1)) - 1);
+			dfdl = lambda_i*m_c3*(exp(m_c4*(lambda_tilde - 1)) - 1);
 		}
 		else
 		{
-			double c6 = m_lam1*m_c3*(exp(m_c4*(m_lam1 - 1)) - 1) - m_c5*m_lam1;
-			dWdI4 = 0.5*m_c5*lambda_i + c6*lambda_i*lambda_i;
+			double c6 = m_c3*(exp(m_c4*(m_lam1 - 1)) - 1) - m_c5*m_lam1;
+			dfdl = m_c5 + 0.5*c6*lambda_i;
 		}
 	}
 	else
 	{
-		dWdI4 = 0;
+		dfdl = 0;
 	}
 
 	// Calculate the Cauchy stress
 	mat3ds identity(1,1,1,0,0,0);
 
-	mat3ds cauchyStress = lambda_tilde*lambda_tilde*((1./3.)*identity - aXa); // J^(-2/3)*I4*(I - at_i at_j)
+	mat3ds cauchyStress = lambda_tilde*lambda_tilde*((1./3.)*identity - aXa); // dI4/dc_ij, note that this is I4_tilde
 
-	cauchyStress *= dWdI4;
-	cauchyStress *= -2.*j;
+	cauchyStress *= dfdl; // df/dlambda
+	cauchyStress *= 0.5*(1./lambda_tilde); // dlambda/dI4, note that this is I4_tilde
+	cauchyStress *= -2.*j; // This is part of the Cauchy stress equation.
 
 	return cauchyStress;
 }
@@ -134,6 +135,7 @@ tens4ds FEUncoupledFiberExpLinearMCLS::DevFiberTangent(FEMaterialPoint &mp, cons
 	double i4 = c_ij.dotdot(aXa); // i4 = (at_i f_Ai G_AB f_Bj at_j), where f_Ai G_AB f_Bj is the Finger deformation tensor
 	double lambda = 1./sqrt(i4); // I4 = 1/i4 = lambda^2
 	double lambda_tilde = J_13*lambda;
+	double lambda_tilde43 = pow(lambda_tilde, -4./3.0);
 	double I4tilde = lambda_tilde*lambda_tilde;
 
 
@@ -141,28 +143,31 @@ tens4ds FEUncoupledFiberExpLinearMCLS::DevFiberTangent(FEMaterialPoint &mp, cons
 	// double I4 = lamd*lamd;
 
 	// strain energy derivative
-	double dWdI4 = 0;
-	double d2WdI42 = 0;
+	double dfdl = 0; // (df_2/dlambda_tilde) where f_2 is defined in Weiss et al. 1996
+	double dfdll = 0; // (df_2/dlambda_tilde) where f_2 is defined in Weiss et al. 1996
 	if (lambda_tilde >= 1)
 	{
 		double lambda_i = 1.0 / lambda_tilde;
 		// double Wl;
 		if (lambda < m_lam1)
 		{
-			dWdI4 = 0.5*lambda_i*lambda_i*m_c3*(exp(m_c4*(lambda_tilde - 1)) - 1);
-			d2WdI42 = -m_c3*(exp(m_c4*(lambda_tilde - 1)) - 1) + 0.5*lambda_tilde*lambda_tilde*m_c3*m_c4*exp(m_c4*(lambda_tilde - 1));
+			dfdl = m_c3*lambda_i*(exp(m_c4*(lambda_tilde - 1.) - 1.));
+			dfdll = -lambda_i*lambda_i*m_c3*(exp(m_c4*(lambda_tilde - 1.) - 1.));
+			dfdll += lambda_i*m_c3*m_c4*exp(m_c4*(lambda_tilde - 1.));
+
 		}
 		else
 		{
-			double c6 = m_lam1*m_c3*(exp(m_c4*(m_lam1 - 1)) - 1) - m_c5*m_lam1;
-			dWdI4 = 0.5*m_c5*lambda_i + c6*lambda_i*lambda_i;
-			d2WdI42 = -0.5*lambda_tilde*m_c5 - c6;
+			double c6 = m_c3*(exp(m_c4*(m_lam1 - 1)) - 1) - m_c5*m_lam1;
+			dfdl = m_c5 + c6*lambda_i;
+			dfdll = -c6*lambda_i*lambda_i;
+			
 		}
 	}
 	else
 	{
-		dWdI4 = 0;
-		d2WdI42 = 0;
+		dfdl = 0;
+		dfdll = 0;
 	}
 
 	// --- calculate tangent ---
@@ -171,25 +176,23 @@ tens4ds FEUncoupledFiberExpLinearMCLS::DevFiberTangent(FEMaterialPoint &mp, cons
 	tens4ds bXb = dyad1s(b_ij); // The tensor product a^ijkl = b^ij*b^kl
 	tens4ds b_ikjl = dyad4s(b_ij); // 0.5*(b^ik*b^jl + b^il*b^jk)
 	mat3ds aVVa_ij = dyad(Vat); // The tensor product x^ij = (V^ik g_kl at^l)*(V^jm g_mn at^n)
-	tens4ds b_aVVa_ijab = dyad1s(b_ij, aVVa_ij); // 0.5*[b_ab*(V^ik g_kl at^l)*(V^jm g_mn at^n) + b_ij*(V^ik g_kl at^l)*(V^jm g_mn at^n)]
-	tens4ds aVVa_aVVa_ijab = dyad1s(aVVa_ij); // [(V^ik g_kl at^l)*(V^jm g_mn at^n)]*[(V^ip g_pq at^r)*(V^st g_tu at^u)]
-	mat3ds b_aVVa_ij = (1./3.)*b_ij - aVVa_ij; // (1/3)*b_ij - (V^ik g_kl at^l)*(V^jm g_mn at^n)
-	tens4ds bb_aVVa_aVVa_ijab = dyad1s(b_aVVa_ij); // (1/3)b_ij[(1/3)b^ab - (V^ik g_kl at^l)*(V^jm g_mn at^n)] - [(1/3)b^ab - (V^ap g_pq at^q)*(V^bc g_cd at^d)](V^ik g_kl at^l)*(V^jm g_mn at^n)
+	mat3ds dI4dcij = I4tilde*((1./3.)*b_ij - aVVa_ij); // dI4/dc_ij = I4*[(1/3)*b_ij - (V^ik g_kl at^l)*(V^jm g_mn at^n)]
+	tens4ds dI4dcij_X_dI4dcab = dyad1s(dI4dcij); // fourth order tensor: dI4/dc_ij dI4/dc_ab
+
 
 	// Initialize the 6x6 matrices.
-	tens4ds d2WdI42_term; // The term that is multiplied by d2WdI42
-	tens4ds dWdI4_term; // The term that is multiplied by d2WdI42
+	tens4ds dI4dcij_term; // The term that is multiplied by the fourth order tensor (dI4/dc_ij)(dI4/dc_ab)
+	tens4ds dI4dcijcab_term; // The term that is multiplied by the foruth order tensor (d^2I4/dc_ij dc_ab)
 	tens4ds stiffnessMatrix;
 
-	d2WdI42_term = 0.5*d2WdI42*(1./9.)*bXb;
-	d2WdI42_term += 0.5*d2WdI42*(1./3.)*b_aVVa_ijab;
-	d2WdI42_term += 0.5*d2WdI42*aVVa_aVVa_ijab;
+	dI4dcij_term = 0.25*(1/(lambda_tilde*lambda_tilde))*dfdll*dI4dcij_X_dI4dcab;
+	dI4dcij_term += -0.25*lambda_tilde43*dfdl*dI4dcij_X_dI4dcab;
 
-	dWdI4_term = I4tilde*dWdI4*bb_aVVa_aVVa_ijab;
-	dWdI4_term += -(1./3.)*I4tilde*dWdI4*b_ikjl;
+	tens4ds d2I4_dcijdcab = (1./I4tilde)*dI4dcij_X_dI4dcab - (1./3.)*I4tilde*b_ikjl; // The second partial derivative if I4_tilde w.r.t. c_ij. Note that this is multiplied because dI4dcij_X_dI4dcab has an I4^2 (tilde) term which should just be I4 (tilde)
 
-	stiffnessMatrix = d2WdI42_term + dWdI4_term;
-	// zero(stiffnessMatrix);
+	dI4dcijcab_term = 0.5*dfdl*(1./lambda_tilde)*d2I4_dcijdcab;
+
+	stiffnessMatrix = dI4dcij_term + dI4dcijcab_term;
 	return stiffnessMatrix;
 }
 
