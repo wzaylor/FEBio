@@ -86,9 +86,6 @@ protected:
 	//! geometrical stiffness (i.e. initial stress)
 	void ElementGeometricalStiffness(int iel, matrix& ke);
 
-	//! **MCLS** "strain" stiffness. This is likely incorrectly named, but it comes from taking the variation on the Finger deformation tensor (c_ij)
-	void ElementStrainStiffness(int iel, matrix& ke);
-
 	//! update the stress of an element
 	void UpdateElementStress(int iel, const FETimeInfo& tp) override;
 

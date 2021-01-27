@@ -27,12 +27,12 @@ SOFTWARE.*/
 
 
 #pragma once
-#include "FEElasticFiberMaterialUC.h"
+#include "FEElasticFiberMaterialUCMCLS.h"
 
 //-----------------------------------------------------------------------------
 //! Uncoupled formulation of the fiber-exp-linear material for use with uncoupled
 //! solid mixtures.
-class FEUncoupledFiberExpLinearMCLS : public FEElasticFiberMaterialUC
+class FEUncoupledFiberExpLinearMCLS : public FEElasticFiberMaterialUCMCLS
 {
 public:
 	//! Constructor
@@ -42,7 +42,7 @@ public:
 	mat3ds DevFiberStress(FEMaterialPoint& pt, const vec3d& n0) override;
 
 	//! calculate deviatoric tangent stiffness at material point
-	tens4ds DevFiberTangent(FEMaterialPoint& pt, const vec3d& n0) override;
+	tens4dmm DevFiberTangent(FEMaterialPoint& pt, const vec3d& n0) override;
 
 	//! calculate deviatoric strain energy density at material point
 	double DevFiberStrainEnergyDensity(FEMaterialPoint& pt, const vec3d& n0) override;

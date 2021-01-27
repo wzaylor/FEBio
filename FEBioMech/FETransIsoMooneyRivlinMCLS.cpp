@@ -30,7 +30,7 @@ SOFTWARE.*/
 #include "FETransIsoMooneyRivlinMCLS.h"
 
 // define the material parameters
-BEGIN_FECORE_CLASS(FETransIsoMooneyRivlinMCLS, FEUncoupledMaterial)
+BEGIN_FECORE_CLASS(FETransIsoMooneyRivlinMCLS, FEUncoupledMaterialMCLS)
 	ADD_PARAMETER(c1          , "c1");
 	ADD_PARAMETER(c2          , "c2");
 	ADD_PARAMETER(m_fib.m_c3  , "c3");
@@ -47,7 +47,7 @@ END_FECORE_CLASS();
 //////////////////////////////////////////////////////////////////////
 
 //-----------------------------------------------------------------------------
-FETransIsoMooneyRivlinMCLS::FETransIsoMooneyRivlinMCLS(FEModel* pfem) : FEUncoupledMaterial(pfem), m_fib(pfem)
+FETransIsoMooneyRivlinMCLS::FETransIsoMooneyRivlinMCLS(FEModel* pfem) : FEUncoupledMaterialMCLS(pfem), m_fib(pfem)
 {
 	m_ac = 0;
 	m_fib.SetParent(this);
@@ -57,10 +57,6 @@ FETransIsoMooneyRivlinMCLS::FETransIsoMooneyRivlinMCLS(FEModel* pfem) : FEUncoup
 mat3ds FETransIsoMooneyRivlinMCLS::DevStress(FEMaterialPoint& mp)
 {
 	FEElasticMaterialPoint& pt = *mp.ExtractData<FEElasticMaterialPoint>();
-
-	// get material parameters
-	// double c1 = c1(mp);
-	// double c2 = c2(mp);
 
 	// determinant of deformation gradient
 	double j = pt.m_J; // **MCLS** This is the determinant of the inverse deformation gradient (i.e. j = 1/J)
@@ -78,21 +74,17 @@ mat3ds FETransIsoMooneyRivlinMCLS::DevStress(FEMaterialPoint& mp)
 
 	// Invariants of b_ij are equal to the invariants of C_AB (where C_AB is the right Cauchy-Green deformation tensor)
 	double I1 = b_ij.tr();
+	double I2 = 0.5*(I1*I1 - b_ij_squared.tr());
 
-	// **MCLS** The partial derivative of \tilde{I1} with respect to c_ij (the Finger deformation tensor, c_ij = f_Ai G_AB f_Bj)
-	mat3ds partial_I1_cij = j_23*(-b_ij + (1./3.)*I1*identity);
+	// **MCLS** The partial derivative of \tilde{I1} with respect to g_ij (the metric on the deformed configuration)
+	mat3ds partial_I1_cij = j_23*(b_ij - (1./3.)*I1*identity);
 
-	// **MCLS** The partial derivative of \tilde{I2} with respect to c_ij (the Finger deformation tensor, c_ij = f_Ai G_AB f_Bj)
-	mat3ds partial_I2_cij = j_43*b_ij_squared;
-	partial_I2_cij += -j_43*(1./3.)*b_ij_squared.tr()*identity;
+	// **MCLS** The partial derivative of \tilde{I2} with respect to g_ij (the metric on the deformed configuration)
+	mat3ds partial_I2_cij = j_43*(I1*b_ij - b_ij_squared - (2./3.)*I2*identity);
 
-	partial_I2_cij += -j_43*I1*b_ij;
-	partial_I2_cij += j_43*(1./3.)*I1*I1*identity;
-
-	// Calculate deviatoricCauchyStress = -2*j*[(dW/dI1)(dI1/dc_ij) + (dW/dI2)(dI2/dc_ij)]
+	// Calculate deviatoricCauchyStress = -2*j*[(dW/dI1)(dI1/dg_ij) + (dW/dI2)(dI2/dg_ij)]
 	// Note that I1 and I2 in the above comment are \tilde{I1} and \tilde{I2}.
-	// This definition is similar to Sansour 1993, where W=rho_0*psi, and rho_0 is the density in the reference configuration, and j = rho_t/rho_0
-	mat3ds deviatoricCauchyStress = -2.*j*(c1*partial_I1_cij + c2*partial_I2_cij);
+	mat3ds deviatoricCauchyStress = 2.*j*(c1*partial_I1_cij + c2*partial_I2_cij);
 
 	// calculate the passive fiber stress
 	mat3ds fiberDeviatoricCauchyStress = m_fib.DevStress(mp);
@@ -106,13 +98,9 @@ mat3ds FETransIsoMooneyRivlinMCLS::DevStress(FEMaterialPoint& mp)
 
 //-----------------------------------------------------------------------------
 //! Calculate deviatoric tangent
-tens4ds FETransIsoMooneyRivlinMCLS::DevTangent(FEMaterialPoint& mp)
+tens4dmm FETransIsoMooneyRivlinMCLS::DevTangent(FEMaterialPoint& mp)
 {
 	FEElasticMaterialPoint& pt = *mp.ExtractData<FEElasticMaterialPoint>();
-
-	// get material parameters
-	// double c1 = c1(mp);
-	// double c2 = c2(mp);
 	
 	// **MCLS** Define the determinant of the inverse deformation gradient (f_Ai).
 	// pt.m_J is calculated using pt.m_F, where pt.m_F is the inverse deformation gradient (f_Ai)
@@ -133,45 +121,49 @@ tens4ds FETransIsoMooneyRivlinMCLS::DevTangent(FEMaterialPoint& mp)
 	b_ij_cubed.yz() = b_ij.xy()*b_ij_squared.xz() + b_ij.yy()*b_ij_squared.yz() + b_ij.yz()*b_ij_squared.zz();
 	b_ij_cubed.xz() = b_ij.xx()*b_ij_squared.xz() + b_ij.xy()*b_ij_squared.yz() + b_ij.xz()*b_ij_squared.zz();
 
+	// Tensor invariants.
+	double I1 = b_ij.tr();
+	double I2 = 0.5*(I1*I1 - b_ij_squared.tr());
+
+	// Other terms
+	mat3ds identity(1,1,1,0,0,0);
+
 	// Initialize the stiffness matrix (i.e. the tangent matrix)
-	tens4ds stiffnessMatrix;
+	tens4dmm stiffnessMatrix;
 
 	// The fourth order tensors used to calculate the material stiffness matrix
-	tens4ds bXb = dyad1s(b_ij); // The tensor product a^ijkl = b^ij*b^kl
-	tens4ds b_ikjl = dyad4s(b_ij); // 0.5*(b^ik*b^jl + b^il*b^jk)
-	tens4ds b2b_ijlk = dyad4s(b_ij_squared, b_ij); // 0.5{[b^ma b^ib + b^mb b^ia] b^jn g_mn + b^mi[b^ja b^nb + b^jb b^na]}
-	tens4ds b2Xb_ijkl = dyad1s(b_ij_squared, b_ij); // a^ijab = b^ab (b^im g_mn b^nj) + b^ij (b^am g_mn b^nb)
-	tens4ds b2Xb2_ijkl = dyad1s(b_ij_squared); // The tensor product a^ijkl = b^im g_mn b^nj b^kr g_rs b^sl
-	tens4ds b3Xb_ijkl = dyad1s(b_ij_cubed, b_ij); // The sum of tensor products a^ijkl = (b^3)^ij b^kl + b^ij (b^3)^kl
-	tens4ds b3b_ijkl = dyad4s(b_ij_cubed, b_ij); // a^ijab = 0.5{[b^ra b^ib + b^rb b^ia]b^js g_sm b^mn g_rn + [b^ja b^sb + b^jb b^sa]b^ri g_sm b^mn g_rn}
-	tens4ds b2_ijkl = dyad4s(b_ij_squared); // a^ijkl = 0.5 b^ri b^js g_sm [b^mk b^nl + b^ml b^nk]
+	tens4dmm b_ijkl = dyad1mm(b_ij, b_ij); // The tensor product a^ijkl = b^ij*b^kl
+	tens4dmm gb_ijkl = dyad1mm(identity, b_ij); // The tensor product a^ijkl = g^ij*b^kl
+	tens4dmm gbb_ijkl = dyad1mm(identity, b_ij_squared); // The tensor product a^ijkl = g^ij b^ka g_ab b^bl
+	tens4ds b_ijkl_sym = dyad4s(b_ij); // 0.5*(b^ik b^jl + b^jk b^il)
+	// ---
+	tens4dmm bbb_ijkl = dyad1mm(b_ij_squared, b_ij); // a^ijkl = b^kl(b^ia g_ab b^bj)
+	tens4ds bb_ikjl = dyad4s(b_ij_squared, b_ij); // a^ijkl = 0.5(b^ik b^ml + b^mk b^il)g_mn b^nj + 0.5(b^jk b^ml + b^mk b^jl)g_mn b^ni
+	tens4dmm gbbb_ijkl = dyad1mm(identity, b_ij_cubed); // The tensor product a^ijkl = g^ij b^ka g_ab b^bm g_mn b^ml
 
-	tens4ds c1Term; // The terms that are multiplied by c1 in the material stiffness matrix
-	tens4ds c2Term; // The terms that are multiplied by c1 in the material stiffness matrix
+	// Initialize the terms that are multiplied by c1 and c2
+	tens4dmm c1_term;
+	tens4dmm c2_term;
+	c1_term.zero();
+	c2_term.zero();
 
-	c1Term = -(1./3.)*b2Xb_ijkl;
-	c1Term += (1./9.)*b_ij.tr()*bXb; // Note that bXb already has the 0.5 incorporated.
-	c1Term += b2b_ijlk;
-	c1Term += -(1./3.)*b_ij.tr()*b_ikjl;
+	// Populate the c1 term
+	c1_term += (1./3.)*b_ijkl - (1./9.)*I1*gb_ijkl;
+	c1_term += (1./3.)*gbb_ijkl - b_ijkl_sym;
 
-	c2Term = (2./3.)*b3Xb_ijkl;
-	c2Term += -(2./9.)*b_ij_squared.tr()*bXb; // Note that bXb already has the 0.5 incorporated.
-	c2Term += -(2./3.)*b_ij.tr()*b2Xb_ijkl;
-	c2Term += (2./9.)*b_ij.tr()*b_ij.tr()*bXb; // Note that bXb already has the 0.5 incorporated.
+	// Populate the c2 term
+	c2_term += (2./3.)*I1*b_ijkl;
+	c2_term += -(2./3.)*bbb_ijkl;
+	c2_term += -(4./9.)*I2*gb_ijkl;
 
-	c2Term += -b3b_ijkl;
-	c2Term += -b2_ijkl;
+	c2_term += -bbb_ijkl.transpose(); // The transpose turns bb_ijkl into a^ijkl = b^ij(b^ja g_ab b^bl)
+	c2_term += -I1*b_ijkl_sym;
+	c2_term += bb_ikjl;
+	c2_term += (2./3.)*I1*gbb_ijkl;
+	c2_term += -(2./3.)*gbbb_ijkl;
 
-	c2Term += (1./3.)*b_ij_squared.tr()*b_ikjl;
-
-	c2Term += b_ij.tr()*b2b_ijlk;
-	c2Term += b2Xb2_ijkl; // Note that b2Xb2_ijkl already has the 0.5 incorporated.is multiplied by 0.5 when it is defined above.
-
-	c2Term += -(1./3.)*b_ij.tr()*b_ij.tr()*b_ikjl;
-
-	// Use the terms above to calculate the stiffnessMatrix
-	stiffnessMatrix = c1*det_f_Ai_23*c1Term;
-	stiffnessMatrix += c2*det_f_Ai_43*c2Term;
+	stiffnessMatrix = c1*det_f_Ai_23*c1_term;
+	stiffnessMatrix += c2*det_f_Ai_43*c2_term;
 
 	// add the passive fiber stiffness
 	stiffnessMatrix += m_fib.DevTangent(mp);

@@ -35,6 +35,7 @@ SOFTWARE.*/
 #include "FEBodyForce.h"
 #include "FEResidualVector.h"
 #include "FEUncoupledMaterial.h"
+#include "FEUncoupledMaterialMCLS.h"
 #include "FEContactInterface.h"
 #include "FESSIShellDomain.h"
 #include <FECore/log.h>
@@ -676,10 +677,10 @@ void FESolidSolver2::PrepStep()
 	zero(ui);
 
 	// **MCLS** This is here for debugging to specify a set of displacements **MCLS debug**
-	// ui[0] = 0.25;
-	// ui[1] = 0.30;
-	// ui[2] = 0.35;
-	// ui[3] = 0.40;
+	// ui[0] = -1.25;
+	// ui[1] = -1.30;
+	// ui[2] = -1.35;
+	// ui[3] = -1.40;
 	// ui[4] = 1.;
 	// ui[5] = 1.;
 	// ui[6] = 1.;

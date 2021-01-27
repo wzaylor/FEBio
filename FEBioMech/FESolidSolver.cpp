@@ -32,6 +32,7 @@ SOFTWARE.*/
 #include "FE3FieldElasticShellDomain.h"
 #include "FEResidualVector.h"
 #include "FEUncoupledMaterial.h"
+#include "FEUncoupledMaterialMCLS.h"
 #include "FEContactInterface.h"
 #include "FESolidLinearSystem.h"
 #include <FECore/sys.h>

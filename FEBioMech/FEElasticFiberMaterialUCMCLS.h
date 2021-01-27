@@ -28,38 +28,39 @@ SOFTWARE.*/
 
 #pragma once
 #include "FEUncoupledMaterialMCLS.h"
-#include "FEUncoupledFiberExpLinearMCLS.h"
-#include "FEActiveFiberContraction.h"
 
 //-----------------------------------------------------------------------------
-//! Transversely Isotropic Mooney-Rivlin material
+//! Base class for single fiber response
 
-//! This material has an isotopric Mooney-Rivlin basis and single preferred
-//! fiber direction.
-
-class FETransIsoMooneyRivlinMCLS: public FEUncoupledMaterialMCLS
+class FEElasticFiberMaterialUCMCLS : public FEUncoupledMaterialMCLS
 {
 public:
-	FETransIsoMooneyRivlinMCLS(FEModel* pfem);
+    FEElasticFiberMaterialUCMCLS(FEModel* pfem);
+
+	// Get the fiber direction (in global coordinates) at a material point
+	vec3d FiberVector(FEMaterialPoint& mp);
+
+	// calculate stress in fiber direction a0
+	virtual mat3ds DevFiberStress(FEMaterialPoint& mp, const vec3d& a0) = 0;
+
+	// Spatial tangent
+	virtual tens4dmm DevFiberTangent(FEMaterialPoint& mp, const vec3d& a0) = 0;
+
+	//! Strain energy density
+	virtual double DevFiberStrainEnergyDensity(FEMaterialPoint& mp, const vec3d& a0) = 0;
 
 public:
-	double			c1;			//!< Mooney-Rivlin coefficient C1
-	double			c2;			//!< Mooney-Rivlin coefficient C2
+	// These are made private since fiber materials should implement the functions above instead. 
+	// The functions can still be reached when a fiber material is used in an elastic mixture. 
+	// In those cases the fiber vector is taken from the first column of Q. 
+	mat3ds DevStress(FEMaterialPoint& mp) final { return DevFiberStress(mp, FiberVector(mp)); }
+	tens4dmm DevTangent(FEMaterialPoint& mp) final { return DevFiberTangent(mp, FiberVector(mp)); }
+	double DevStrainEnergyDensity(FEMaterialPoint& mp) final { return DevFiberStrainEnergyDensity(mp, FiberVector(mp)); }
 
 public:
-	//! calculate deviatoric stress at material point
-	mat3ds DevStress(FEMaterialPoint& pt) override;
+	FEParamVec3		m_fiber;	//!< fiber orientation
 
-	//! calculate deviatoric tangent stiffness at material point
-	tens4dmm DevTangent(FEMaterialPoint& pt) override;
+	double	m_epsf;
 
-	//! calculate deviatoric strain energy density at material point
-	double DevStrainEnergyDensity(FEMaterialPoint& pt) override;
-
-protected:
-	FEUncoupledFiberExpLinearMCLS	m_fib;
-	FEActiveFiberContraction*	m_ac;
-
-	// declare parameter list
 	DECLARE_FECORE_CLASS();
 };

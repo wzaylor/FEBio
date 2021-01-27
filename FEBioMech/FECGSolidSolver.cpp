@@ -34,6 +34,7 @@ SOFTWARE.*/
 #include "FECore/log.h"
 #include "FEContactInterface.h"
 #include "FEUncoupledMaterial.h"
+#include "FEUncoupledMaterialMCLS.h"
 #include "FEResidualVector.h"
 #include "FEElasticDomain.h"
 #include "FE3FieldElasticSolidDomain.h"

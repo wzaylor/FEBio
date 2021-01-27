@@ -35,7 +35,7 @@ SOFTWARE.*/
 #endif
 
 //-----------------------------------------------------------------------------
-BEGIN_FECORE_CLASS(FEUncoupledFiberExpLinearMCLS, FEElasticFiberMaterialUC);
+BEGIN_FECORE_CLASS(FEUncoupledFiberExpLinearMCLS, FEElasticFiberMaterialUCMCLS);
 	ADD_PARAMETER(m_c3  , FE_RANGE_GREATER_OR_EQUAL(0.0), "c3");
 	ADD_PARAMETER(m_c4  , FE_RANGE_GREATER_OR_EQUAL(0.0), "c4");
 	ADD_PARAMETER(m_c5  , FE_RANGE_GREATER_OR_EQUAL(0.0), "c5");
@@ -45,7 +45,7 @@ BEGIN_FECORE_CLASS(FEUncoupledFiberExpLinearMCLS, FEElasticFiberMaterialUC);
 END_FECORE_CLASS();
 
 //-----------------------------------------------------------------------------
-FEUncoupledFiberExpLinearMCLS::FEUncoupledFiberExpLinearMCLS(FEModel* pfem) : FEElasticFiberMaterialUC(pfem)
+FEUncoupledFiberExpLinearMCLS::FEUncoupledFiberExpLinearMCLS(FEModel* pfem) : FEElasticFiberMaterialUCMCLS(pfem)
 {
 	m_c3 = m_c4 = m_c5 = 0;
 	m_lam1 = 1;
@@ -83,14 +83,14 @@ mat3ds FEUncoupledFiberExpLinearMCLS::DevFiberStress(FEMaterialPoint &mp, const 
 	{
 		double lambda_i = 1.0 / lambda_tilde;
 		// double Wl;
-		if (lambda < m_lam1)
+		if (lambda_tilde < m_lam1)
 		{
-			dfdl = lambda_i*m_c3*(exp(m_c4*(lambda_tilde - 1)) - 1);
+			dfdl = m_c3*lambda_i*(exp(m_c4*(lambda_tilde - 1.)) - 1.);
 		}
 		else
 		{
-			double c6 = m_c3*(exp(m_c4*(m_lam1 - 1)) - 1) - m_c5*m_lam1;
-			dfdl = m_c5 + 0.5*c6*lambda_i;
+			double c6 = m_c3*(exp(m_c4*(m_lam1 - 1.)) - 1.) - m_c5*m_lam1;
+			dfdl = m_c5 + c6*lambda_i;
 		}
 	}
 	else
@@ -101,18 +101,18 @@ mat3ds FEUncoupledFiberExpLinearMCLS::DevFiberStress(FEMaterialPoint &mp, const 
 	// Calculate the Cauchy stress
 	mat3ds identity(1,1,1,0,0,0);
 
-	mat3ds cauchyStress = lambda_tilde*lambda_tilde*((1./3.)*identity - aXa); // dI4/dc_ij, note that this is I4_tilde
+	mat3ds cauchyStress = lambda_tilde*lambda_tilde*(aXa - (1./3.)*identity); // dI4/dc_ij, note that this is I4_tilde
 
 	cauchyStress *= dfdl; // df/dlambda
 	cauchyStress *= 0.5*(1./lambda_tilde); // dlambda/dI4, note that this is I4_tilde
-	cauchyStress *= -2.*j; // This is part of the Cauchy stress equation.
+	cauchyStress *= 2.*j; // This is part of the Cauchy stress equation.
 
 	return cauchyStress;
 }
 
 //-----------------------------------------------------------------------------
 //! Fiber material tangent
-tens4ds FEUncoupledFiberExpLinearMCLS::DevFiberTangent(FEMaterialPoint &mp, const vec3d& at)
+tens4dmm FEUncoupledFiberExpLinearMCLS::DevFiberTangent(FEMaterialPoint &mp, const vec3d& at)
 {
 	FEElasticMaterialPoint& pt = *mp.ExtractData<FEElasticMaterialPoint>();
 
@@ -149,7 +149,7 @@ tens4ds FEUncoupledFiberExpLinearMCLS::DevFiberTangent(FEMaterialPoint &mp, cons
 	{
 		double lambda_i = 1.0 / lambda_tilde;
 		// double Wl;
-		if (lambda < m_lam1)
+		if (lambda_tilde < m_lam1)
 		{
 			dfdl = m_c3*lambda_i*(exp(m_c4*(lambda_tilde - 1.) - 1.));
 			dfdll = -lambda_i*lambda_i*m_c3*(exp(m_c4*(lambda_tilde - 1.) - 1.));
@@ -158,7 +158,7 @@ tens4ds FEUncoupledFiberExpLinearMCLS::DevFiberTangent(FEMaterialPoint &mp, cons
 		}
 		else
 		{
-			double c6 = m_c3*(exp(m_c4*(m_lam1 - 1)) - 1) - m_c5*m_lam1;
+			double c6 = m_c3*(exp(m_c4*(m_lam1 - 1.)) - 1.) - m_c5*m_lam1;
 			dfdl = m_c5 + c6*lambda_i;
 			dfdll = -c6*lambda_i*lambda_i;
 			
@@ -172,27 +172,22 @@ tens4ds FEUncoupledFiberExpLinearMCLS::DevFiberTangent(FEMaterialPoint &mp, cons
 
 	// --- calculate tangent ---
 
-	// The fourth order tensors used to calculate the material stiffness matrix
-	tens4ds bXb = dyad1s(b_ij); // The tensor product a^ijkl = b^ij*b^kl
-	tens4ds b_ikjl = dyad4s(b_ij); // 0.5*(b^ik*b^jl + b^il*b^jk)
+	// Second order tensors that compose the fourth order tensors
+	mat3ds identity(1,1,1,0,0,0);
+	mat3ds dI4dg = aXa - (1./3.)*identity; // a^i a^j - (1/3)I^ij
 	mat3ds aVVa_ij = dyad(Vat); // The tensor product x^ij = (V^ik g_kl at^l)*(V^jm g_mn at^n)
-	mat3ds dI4dcij = I4tilde*((1./3.)*b_ij - aVVa_ij); // dI4/dc_ij = I4*[(1/3)*b_ij - (V^ik g_kl at^l)*(V^jm g_mn at^n)]
-	tens4ds dI4dcij_X_dI4dcab = dyad1s(dI4dcij); // fourth order tensor: dI4/dc_ij dI4/dc_ab
-
+	mat3ds dI4dc = (1./3.)*b_ij - aVVa_ij; // (1/3)b^ij - (V^ik g_kl at^l)*(V^jm g_mn at^n)
 
 	// Initialize the 6x6 matrices.
-	tens4ds dI4dcij_term; // The term that is multiplied by the fourth order tensor (dI4/dc_ij)(dI4/dc_ab)
-	tens4ds dI4dcijcab_term; // The term that is multiplied by the foruth order tensor (d^2I4/dc_ij dc_ab)
-	tens4ds stiffnessMatrix;
+	tens4dmm stiffnessMatrix;
+	stiffnessMatrix.zero(); 
 
-	dI4dcij_term = 0.25*(1/(lambda_tilde*lambda_tilde))*dfdll*dI4dcij_X_dI4dcab;
-	dI4dcij_term += -0.25*lambda_tilde43*dfdl*dI4dcij_X_dI4dcab;
+	// Assemble the stiffness matrix
+	stiffnessMatrix += 0.25*I4tilde*dfdll*dyad1mm(dI4dg, dI4dc);
+	stiffnessMatrix += -0.25*lambda_tilde*dfdl*dyad1mm(dI4dg, dI4dc);
+	stiffnessMatrix += (1./6.)*lambda_tilde*dfdl*dyad1mm(dI4dg, b_ij);
+	stiffnessMatrix += -0.5*(1./lambda_tilde)*dfdl*dyad1mm(dI4dg, aVVa_ij);
 
-	tens4ds d2I4_dcijdcab = (1./I4tilde)*dI4dcij_X_dI4dcab - (1./3.)*I4tilde*b_ikjl; // The second partial derivative if I4_tilde w.r.t. c_ij. Note that this is multiplied because dI4dcij_X_dI4dcab has an I4^2 (tilde) term which should just be I4 (tilde)
-
-	dI4dcijcab_term = 0.5*dfdl*(1./lambda_tilde)*d2I4_dcijdcab;
-
-	stiffnessMatrix = dI4dcij_term + dI4dcijcab_term;
 	return stiffnessMatrix;
 }
 

@@ -26,15 +26,15 @@ SOFTWARE.*/
 
 
 #pragma once
-#include "FEUncoupledMaterial.h"
+#include "FEUncoupledMaterialMCLS.h"
 #include <FECore/FEModelParam.h>
 //-----------------------------------------------------------------------------
 //! Mooney-Rivlin material
 
-class FEMooneyRivlinMCLS : public FEUncoupledMaterial
+class FEMooneyRivlinMCLS : public FEUncoupledMaterialMCLS
 {
 public:
-	FEMooneyRivlinMCLS(FEModel* pfem) : FEUncoupledMaterial(pfem) {}
+	FEMooneyRivlinMCLS(FEModel* pfem) : FEUncoupledMaterialMCLS(pfem) {}
 
 public:
 	FEParamDouble	m_c1;	//!< Mooney-Rivlin coefficient C1
@@ -44,8 +44,8 @@ public:
 	//! calculate deviatoric stress at material point
 	mat3ds DevStress(FEMaterialPoint& pt) override;
 
-	//! calculate deviatoric tangent stiffness at material point
-	tens4ds DevTangent(FEMaterialPoint& pt) override;
+	//! calculate deviatoric tangent stiffness at material point. **MCLS** This allows for a non-symmetric tangent stiffness matrix to be populated in D
+	tens4dmm DevTangent(FEMaterialPoint& pt) override;
 
 	//! calculate deviatoric strain energy density
 	double DevStrainEnergyDensity(FEMaterialPoint& mp) override;

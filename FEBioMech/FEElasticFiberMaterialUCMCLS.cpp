@@ -26,40 +26,33 @@ SOFTWARE.*/
 
 
 
-#pragma once
-#include "FEUncoupledMaterialMCLS.h"
-#include "FEUncoupledFiberExpLinearMCLS.h"
-#include "FEActiveFiberContraction.h"
+#include "stdafx.h"
+#include "FEElasticFiberMaterialUCMCLS.h"
 
 //-----------------------------------------------------------------------------
-//! Transversely Isotropic Mooney-Rivlin material
+BEGIN_FECORE_CLASS(FEElasticFiberMaterialUCMCLS, FEUncoupledMaterialMCLS)
+	ADD_PARAMETER(m_fiber, "fiber");
+END_FECORE_CLASS();
 
-//! This material has an isotopric Mooney-Rivlin basis and single preferred
-//! fiber direction.
 
-class FETransIsoMooneyRivlinMCLS: public FEUncoupledMaterialMCLS
+//-----------------------------------------------------------------------------
+FEElasticFiberMaterialUCMCLS::FEElasticFiberMaterialUCMCLS(FEModel* pfem) : FEUncoupledMaterialMCLS(pfem)
 {
-public:
-	FETransIsoMooneyRivlinMCLS(FEModel* pfem);
+	// initialize the fiber vector
+	m_fiber = vec3d(1, 0, 0);
+}
 
-public:
-	double			c1;			//!< Mooney-Rivlin coefficient C1
-	double			c2;			//!< Mooney-Rivlin coefficient C2
+// Get the fiber direction (in global coordinates) at a material point
+vec3d FEElasticFiberMaterialUCMCLS::FiberVector(FEMaterialPoint& mp)
+{
+	// get the material coordinate system
+	mat3d Q = GetLocalCS(mp);
 
-public:
-	//! calculate deviatoric stress at material point
-	mat3ds DevStress(FEMaterialPoint& pt) override;
+	// get the fiber vector in local coordinates
+	vec3d fiber = m_fiber.unitVector(mp);
 
-	//! calculate deviatoric tangent stiffness at material point
-	tens4dmm DevTangent(FEMaterialPoint& pt) override;
+	// convert to global coordinates
+	vec3d a0 = Q*fiber;
 
-	//! calculate deviatoric strain energy density at material point
-	double DevStrainEnergyDensity(FEMaterialPoint& pt) override;
-
-protected:
-	FEUncoupledFiberExpLinearMCLS	m_fib;
-	FEActiveFiberContraction*	m_ac;
-
-	// declare parameter list
-	DECLARE_FECORE_CLASS();
-};
+	return a0;
+}
