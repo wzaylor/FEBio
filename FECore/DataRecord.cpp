@@ -125,6 +125,7 @@ std::string DataRecord::printToFormatString(int i)
 	strcpy(szfmt, m_szfmt);
 
 	std::stringstream ss;
+	ss.precision(12);
 
 	int nitem = m_item[i];
 	char* sz = szfmt, *ch = 0;
@@ -180,7 +181,8 @@ std::string DataRecord::printToFormatString(int i)
 				*ch = '%'; sz = ch + 1;
 			}
 		}
-		else { ss << "%s"; break; }
+		// else { ss << "%s"; break; }
+		else { ss << sz; break; } // **MCLS** Put the remainder of sz as the end of this line's string and break the loop.
 	} while (*sz);
 	ss << "\n";
 
