@@ -32,6 +32,7 @@ SOFTWARE.*/
 #include "FECore/FECoreKernel.h"
 #include "FECore/FEMaterial.h"
 #include <FEBioMech/FEUncoupledMaterial.h>
+#include <FEBioMech/FEUncoupledMaterialMCLS.h>
 #include <FECore/log.h>
 #include <sstream>
 
@@ -117,7 +118,8 @@ void FEBioMaterialSection::Parse(XMLTag& tag)
 			// For uncoupled materials, we collect the bulk moduli of child materials
 			// and assign it to the top-level material (this one)
 			FEUncoupledMaterial* pucm = dynamic_cast<FEUncoupledMaterial*>(pmat);
-			if (pucm) FixUncoupledMaterial(pucm);
+			// FEUncoupledMaterialMCLS* pucm = dynamic_cast<FEUncoupledMaterialMCLS*>(pmat); // **MCLS** Do the same for the inverse formulation material
+			// if (pucm) FixUncoupledMaterial(pucm);
 		}
 		else throw XMLReader::InvalidTag(tag);
 
@@ -127,21 +129,21 @@ void FEBioMaterialSection::Parse(XMLTag& tag)
 	while (!tag.isend());
 }
 
-void FEBioMaterialSection::FixUncoupledMaterial(FEUncoupledMaterial* mat)
-{
-	double K = mat->m_K;
-	for (int i = 0; i < mat->Properties(); ++i)
-	{
-		FEUncoupledMaterial* mati = dynamic_cast<FEUncoupledMaterial*>(mat->GetProperty(i));
-		if (mati)
-		{
-			FixUncoupledMaterial(mati);
-			K += mati->m_K;
-			mati->m_K = 0.0;
-		}
-	}
-	mat->m_K = K;
-}
+// void FEBioMaterialSection::FixUncoupledMaterial(FEUncoupledMaterial* mat)
+// {
+// 	double K = mat->m_K;
+// 	for (int i = 0; i < mat->Properties(); ++i)
+// 	{
+// 		FEUncoupledMaterial* mati = dynamic_cast<FEUncoupledMaterial*>(mat->GetProperty(i));
+// 		if (mati)
+// 		{
+// 			FixUncoupledMaterial(mati);
+// 			K += mati->m_K;
+// 			mati->m_K = 0.0;
+// 		}
+// 	}
+// 	mat->m_K = K;
+// }
 
 
 //===============================================================================

@@ -30,6 +30,7 @@ SOFTWARE.*/
 #include "FEBioMechData.h"
 #include "FEElasticMaterial.h"
 #include "FEUncoupledMaterial.h"
+#include "FEUncoupledMaterialMCLS.h"
 #include "FEDamageMaterialPoint.h"
 #include "FEElasticMixture.h"
 #include "FEElasticMultigeneration.h"
@@ -191,6 +192,20 @@ double FENodeForceZ::value(int nnode)
 	return 0;
 }
 
+// //-----------------------------------------------------------------------------
+// double FELogNodeDeformationGradientXX::value(int nnode)
+// {
+// 	double val = 0.0;
+// 	FEMesh& mesh = GetFEModel()->GetMesh();
+// 	FENode& node = mesh.Node(nnode);
+// 	node.
+// 	for (int i=0; i<nint; ++i)
+// 	{
+// 		FEElasticMaterialPoint& pt = *el.GetMaterialPoint(i)->ExtractData<FEElasticMaterialPoint>();
+// 		val += pt.m_F(0,0);
+// 	}
+// 	return val / (double) nint;
+// }
 
 //-----------------------------------------------------------------------------
 double FELogElemPosX::value(FEElement& el)

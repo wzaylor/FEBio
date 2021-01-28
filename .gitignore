@@ -384,3 +384,7 @@ MigrationBackup/
 
 # miscellaneous
 Documentation/Doxygen/doc
+
+# **MCLS**
+# The contentes of the "test" directory.
+/test/*
