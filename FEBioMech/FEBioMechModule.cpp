@@ -93,6 +93,7 @@ SOFTWARE.*/
 #include "FETransIsoMooneyRivlin.h"
 #include "FETransIsoMooneyRivlinMCLS.h"
 #include "FETransIsoVerondaWestmann.h"
+#include "FETransIsoVerondaWestmannMCLS.h"
 #include "FETrussMaterial.h"
 #include "FEUncoupledActiveContraction.h"
 #include "FEUncoupledElasticMixture.h"
@@ -341,6 +342,7 @@ void FEBioMech::InitModule()
 	REGISTER_FECORE_CLASS(FETransIsoMooneyRivlin, "trans iso Mooney-Rivlin");
 	REGISTER_FECORE_CLASS(FETransIsoMooneyRivlinMCLS, "trans iso Mooney-RivlinMCLS");
 	REGISTER_FECORE_CLASS(FETransIsoVerondaWestmann, "trans iso Veronda-Westmann");
+	REGISTER_FECORE_CLASS(FETransIsoVerondaWestmannMCLS, "trans iso Veronda-WestmannMCLS");
 	REGISTER_FECORE_CLASS(FEUncoupledElasticMixture, "uncoupled solid mixture");
 	REGISTER_FECORE_CLASS(FEVerondaWestmann, "Veronda-Westmann");
 	REGISTER_FECORE_CLASS(FEUncoupledViscoElasticMaterial, "uncoupled viscoelastic");
@@ -690,6 +692,15 @@ void FEBioMech::InitModule()
 	REGISTER_FECORE_CLASS(FENodeForceX, "Rx");
 	REGISTER_FECORE_CLASS(FENodeForceY, "Ry");
 	REGISTER_FECORE_CLASS(FENodeForceZ, "Rz");
+	// REGISTER_FECORE_CLASS(FELogNodeDeformationGradientXX, "Fxx"); // **MCLS** Adding nodal deformation gradient data.
+	// REGISTER_FECORE_CLASS(FELogNodeDeformationGradientXY, "Fxy");
+	// REGISTER_FECORE_CLASS(FELogNodeDeformationGradientXZ, "Fxz");
+	// REGISTER_FECORE_CLASS(FELogNodeDeformationGradientYX, "Fyx");
+	// REGISTER_FECORE_CLASS(FELogNodeDeformationGradientYY, "Fyy");
+	// REGISTER_FECORE_CLASS(FELogNodeDeformationGradientYZ, "Fyz");
+	// REGISTER_FECORE_CLASS(FELogNodeDeformationGradientZX, "Fzx");
+	// REGISTER_FECORE_CLASS(FELogNodeDeformationGradientZY, "Fzy");
+	// REGISTER_FECORE_CLASS(FELogNodeDeformationGradientZZ, "Fzz");
 
 	//-----------------------------------------------------------------------------
 	// Derived from FELogElemData

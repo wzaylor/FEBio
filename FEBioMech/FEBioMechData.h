@@ -157,6 +157,14 @@ public:
 	double value(int node); 
 };
 
+// //-----------------------------------------------------------------------------
+// class FELogNodeDeformationGradientXX : public FENodeLogData
+// {
+// public:
+// 	FELogNodeDeformationGradientXX(FEModel* pfem) : FENodeLogData(pfem){}
+// 	double value(int node);
+// };
+
 //=============================================================================
 // E L E M E N T   D A T A
 //=============================================================================
