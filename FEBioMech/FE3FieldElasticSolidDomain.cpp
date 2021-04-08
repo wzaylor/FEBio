@@ -345,7 +345,8 @@ void FE3FieldElasticSolidDomain::ElementDilatationalStiffness(FEModel& fem, int 
 		// The inverse deformation gradient is calculated using the original code.
 		// The inverse gradient is calculated because we are taking the original known node positions to be in the deformed configuration, and taking the displacements to be defining the node positions in the reference configuration.
 		det_f_Ai_null = defgrad(elem, f_Ai, n);
-		double x = -d2UdJ2*det_f_Ai_null; // TODO:: double check this formulation.
+		F_iA = f_Ai.inverse();
+		double x = -d2UdJ2*ed.eJ; // TODO:: double check this formulation.
 
 		// **MCLS** ke is not symmetric.
 		for (int i = 0, i3 = 0; i<neln; ++i, i3 += 3)
@@ -364,17 +365,17 @@ void FE3FieldElasticSolidDomain::ElementDilatationalStiffness(FEModel& fem, int 
 				// **MCLS** ke_iA = -(d^2U/dJ^2)*J*F_mA*(dN/dx_m)*(dN/dx_i)
 				// Note that J in the above equation is the average Jacobian and not the Jacobian at the element node coordinate.
 				// Also multiply by detJ0_element
-				ke[i3  ][j3  ] += x*Gxi*detJ0_element*(Gxj*f_Ai(0,0) + Gyj*f_Ai(1,0) + Gzj*f_Ai(2,0));
-				ke[i3+1][j3  ] += x*Gyi*detJ0_element*(Gxj*f_Ai(0,0) + Gyj*f_Ai(1,0) + Gzj*f_Ai(2,0));
-				ke[i3+2][j3  ] += x*Gzi*detJ0_element*(Gxj*f_Ai(0,0) + Gyj*f_Ai(1,0) + Gzj*f_Ai(2,0));
+				ke[i3  ][j3  ] += x*Gxi*detJ0_element*(Gxj*F_iA(0,0) + Gyj*F_iA(1,0) + Gzj*F_iA(2,0));
+				ke[i3+1][j3  ] += x*Gyi*detJ0_element*(Gxj*F_iA(0,0) + Gyj*F_iA(1,0) + Gzj*F_iA(2,0));
+				ke[i3+2][j3  ] += x*Gzi*detJ0_element*(Gxj*F_iA(0,0) + Gyj*F_iA(1,0) + Gzj*F_iA(2,0));
 				// -------
-				ke[i3  ][j3+1] += x*Gxi*detJ0_element*(Gxj*f_Ai(0,1) + Gyj*f_Ai(1,1) + Gzj*f_Ai(2,1));
-				ke[i3+1][j3+1] += x*Gyi*detJ0_element*(Gxj*f_Ai(0,1) + Gyj*f_Ai(1,1) + Gzj*f_Ai(2,1));
-				ke[i3+2][j3+1] += x*Gzi*detJ0_element*(Gxj*f_Ai(0,1) + Gyj*f_Ai(1,1) + Gzj*f_Ai(2,1));
+				ke[i3  ][j3+1] += x*Gxi*detJ0_element*(Gxj*F_iA(0,1) + Gyj*F_iA(1,1) + Gzj*F_iA(2,1));
+				ke[i3+1][j3+1] += x*Gyi*detJ0_element*(Gxj*F_iA(0,1) + Gyj*F_iA(1,1) + Gzj*F_iA(2,1));
+				ke[i3+2][j3+1] += x*Gzi*detJ0_element*(Gxj*F_iA(0,1) + Gyj*F_iA(1,1) + Gzj*F_iA(2,1));
 				// -------
-				ke[i3  ][j3+2] += x*Gxi*detJ0_element*(Gxj*f_Ai(0,2) + Gyj*f_Ai(1,2) + Gzj*f_Ai(2,2));
-				ke[i3+1][j3+2] += x*Gyi*detJ0_element*(Gxj*f_Ai(0,2) + Gyj*f_Ai(1,2) + Gzj*f_Ai(2,2));
-				ke[i3+2][j3+2] += x*Gzi*detJ0_element*(Gxj*f_Ai(0,2) + Gyj*f_Ai(1,2) + Gzj*f_Ai(2,2));
+				ke[i3  ][j3+2] += x*Gxi*detJ0_element*(Gxj*F_iA(0,2) + Gyj*F_iA(1,2) + Gzj*F_iA(2,2));
+				ke[i3+1][j3+2] += x*Gyi*detJ0_element*(Gxj*F_iA(0,2) + Gyj*F_iA(1,2) + Gzj*F_iA(2,2));
+				ke[i3+2][j3+2] += x*Gzi*detJ0_element*(Gxj*F_iA(0,2) + Gyj*F_iA(1,2) + Gzj*F_iA(2,2));
 
 			}
 		}
